@@ -2,16 +2,12 @@
 
 > **Source:** https://github.com/metalbear-co/docs/tree/main/docs/troubleshooting
 >
-> **Important:** Always check `mirrord --version` first. Some solutions require specific minimum versions.
+> **Default:** Unless noted, solutions apply to all mirrord versions and platforms.
+> Always check `mirrord --version` when troubleshooting.
 
 ---
 
 ## I've run my program with mirrord, but it seems to have no effect
-
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | all |
 
 There are currently two known cases where mirrord cannot load into the application's process:
 
@@ -29,21 +25,13 @@ Another reason that mirrord might seem not to work is if your remote pod has mor
 
 ## When running a Go program on Linux, DNS and outgoing traffic filters seem to have no effect
 
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | Linux |
+> **Platform:** Linux only
 
 This can be caused when Go resolves DNS without going through libc. Build your Go binary with the following environment variable: `GODEBUG=netdns=cgo`
 
 ---
 
 ## I've run my Turbo task with mirrord, but it seems to have no effect
-
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | all |
 
 When executing a task Turbo strips most of the existing process environment, including internal mirrord variables required during libc call interception setup. There are two alternative ways to solve this problem:
 
@@ -61,21 +49,13 @@ When executing a task Turbo strips most of the existing process environment, inc
 
 ## Incoming traffic to the remote target doesn't reach my local process
 
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | all |
-
 This could happen because the local process is listening on a different port than the remote target. You can either change the local process to listen on the same port as the remote target (don't worry about the port being used locally by other processes), or use the `port_mapping` configuration to map the local port to a remote port.
 
 ---
 
 ## The remote target stops receiving remote traffic, but it doesn't reach my local process either
 
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | all (service mesh clusters) |
+> **Platform:** Service mesh clusters
 
 This can happen in some clusters using a service mesh when stealing incoming traffic. You can use this configuration to fix it:
 
@@ -86,11 +66,6 @@ This can happen in some clusters using a service mesh when stealing incoming tra
 ---
 
 ## My application is trying to read a file locally instead of from the cluster
-
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | all |
 
 mirrord has a list of path patterns that are read locally by default regardless of the configured fs mode. You can override this behavior in the configuration.
 
@@ -105,11 +80,6 @@ In order to override that settings for a path or a pattern, add it to the approp
 
 ## My local process fails to resolve the domain name of a Kubernetes service in the same cluster
 
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | all |
-
 If you've set `feature.fs.mode` to `local`, try changing it to `localwithoverrides`.
 
 When the `local` mode is set, all files will be opened locally. This might prevent your process from resolving cluster-internal domain names correctly, because it can no longer read Kubelet-generated configuration files like `/etc/resolv.conf`. With `localwithoverrides`, such files are read from the remote pod instead.
@@ -117,11 +87,6 @@ When the `local` mode is set, all files will be opened locally. This might preve
 ---
 
 ## Old mirrord agent pods are not getting deleted after the mirrord run is completed
-
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | all |
 
 If an agent pod's status is `Running`, it means mirrord is probably still running locally as well. Once you terminate the local process, the agent pod's status should change to `Completed`.
 
@@ -135,10 +100,7 @@ kubectl delete jobs --selector=app=mirrord --field-selector=status.successful=1
 
 ## My local process gets permission (EACCES) error on file access or DNS can't resolve
 
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | Bottlerocket, SELinux |
+> **Platform:** Bottlerocket, SELinux clusters
 
 If your cluster is running on Bottlerocket or has SELinux enabled, please try enabling the `privileged` flag in the agent configuration:
 
@@ -154,10 +116,7 @@ If your cluster is running on Bottlerocket or has SELinux enabled, please try en
 
 ## `mirrord operator status` fails with `503 Service Unavailable` on GKE
 
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all (operator) |
-| Platforms | GKE |
+> **Platform:** GKE with private networking
 
 If private networking is enabled, it is likely due to firewall rules blocking the mirrord operator's API service from the API server. To fix this, add a firewall rule that allows your cluster's master nodes to access TCP port 443 in your cluster's pods.
 
@@ -165,10 +124,7 @@ If private networking is enabled, it is likely due to firewall rules blocking th
 
 ## My local process encounters unexpected certificate validation errors
 
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | macOS |
+> **Platform:** macOS
 
 When running processes locally versus in a container within Kubernetes, some languages handle certificate validation differently. For instance, a Go application on macOS will use the macOS Keychain for certificate validation, whereas the same application in a container will use different API calls.
 
@@ -186,10 +142,7 @@ This configuration would make any certificate trusted for the process.
 
 ## Agent connection fails or drops when using an ephemeral agent with a service mesh
 
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | all (service mesh clusters) |
+> **Platform:** Service mesh clusters
 
 When running the agent as an ephemeral container, the agent shares the network stack with the target pod. This means that incoming connections to the agent are handled by the service mesh, which might drop it for various reasons (lack of TLS, not HTTP, etc.) To work around that, set the agent.port to be static using `agent.port` in values.yaml when installing the operator, then add a port exclusion for the agent port in your service mesh's configuration. For example, if you use Istio and have set the agent port to 5000, you can add the following annotation for exclusion:
 
@@ -200,11 +153,6 @@ traffic.sidecar.istio.io/excludeInboundPorts: '50000'
 ---
 
 ## I'm running a Next.js server with Nx and mirrord, but it doesn't behave as expected
-
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | all |
 
 If your Next.js app is managed by Nx and uses a custom server, the local process may crash or behave incorrectly because mirrord mirrors conflicting environment variables from the remote target.
 
@@ -227,11 +175,6 @@ To fix this, use `feature.env.exclude` to prevent mirrord from importing these s
 
 ## I can't get mirrord to work with Remix/Vite
 
-| Requirement | Value |
-|-------------|-------|
-| Min Version | all |
-| Platforms | all |
-
 Remix and Vite use the `NODE_ENV` environment variable to determine the runtime configuration. To ensure consistent behavior, you can override the remote `NODE_ENV` value:
 
 ```json
@@ -250,10 +193,7 @@ Remix and Vite use the `NODE_ENV` environment variable to determine the runtime 
 
 ## Response headers not being injected
 
-| Requirement | Value |
-|-------------|-------|
-| Min Version | mirrord-agent 3.163.0 |
-| Platforms | all |
+> **Requires:** mirrord-agent 3.163.0+
 
 When debugging, it's useful to know how a response was handled by mirrord after being intercepted. The `mirrord-agent` header indicates whether traffic was forwarded to the local process or passed through.
 
