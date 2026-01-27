@@ -2,8 +2,7 @@
 
 > **Source:** https://github.com/metalbear-co/docs/tree/main/docs/troubleshooting
 >
-> **Default:** Unless noted, solutions apply to all mirrord versions and platforms.
-> Always check `mirrord --version` when troubleshooting.
+> Unless noted, solutions apply to all mirrord versions and platforms.
 
 ## I've run my program with mirrord, but it seems to have no effect
 
@@ -21,11 +20,9 @@ Another reason that mirrord might seem not to work is if your remote pod has mor
 
 ## When running a Go program on Linux, DNS and outgoing traffic filters seem to have no effect
 
-> **Platform:** Linux only
-
 This can be caused when Go resolves DNS without going through libc. Build your Go binary with the following environment variable: `GODEBUG=netdns=cgo`
 
-## I've run my Turbo task with mirrord, but it seems to have no effect
+## I've run my [Turbo](https://turbo.build/) task with mirrord, but it seems to have no effect
 
 When executing a task Turbo strips most of the existing process environment, including internal mirrord variables required during libc call interception setup. There are two alternative ways to solve this problem:
 
@@ -44,8 +41,6 @@ When executing a task Turbo strips most of the existing process environment, inc
 This could happen because the local process is listening on a different port than the remote target. You can either change the local process to listen on the same port as the remote target (don't worry about the port being used locally by other processes), or use the `port_mapping` configuration to map the local port to a remote port.
 
 ## The remote target stops receiving remote traffic, but it doesn't reach my local process either
-
-> **Platform:** Service mesh clusters
 
 This can happen in some clusters using a service mesh when stealing incoming traffic. You can use this configuration to fix it:
 
@@ -80,9 +75,7 @@ On clusters with Kubernetes version v1.23 or higher, agent pods are automaticall
 kubectl delete jobs --selector=app=mirrord --field-selector=status.successful=1
 ```
 
-## My local process gets permission (EACCES) error on file access or DNS can't resolve
-
-> **Platform:** Bottlerocket, SELinux clusters
+## My local process gets permission (EACCESS) error on file access or DNS can't resolve
 
 If your cluster is running on Bottlerocket or has SELinux enabled, please try enabling the `privileged` flag in the agent configuration:
 
@@ -96,13 +89,9 @@ If your cluster is running on Bottlerocket or has SELinux enabled, please try en
 
 ## `mirrord operator status` fails with `503 Service Unavailable` on GKE
 
-> **Platform:** GKE with private networking
-
 If private networking is enabled, it is likely due to firewall rules blocking the mirrord operator's API service from the API server. To fix this, add a firewall rule that allows your cluster's master nodes to access TCP port 443 in your cluster's pods.
 
 ## My local process encounters unexpected certificate validation errors
-
-> **Platform:** macOS
 
 When running processes locally versus in a container within Kubernetes, some languages handle certificate validation differently. For instance, a Go application on macOS will use the macOS Keychain for certificate validation, whereas the same application in a container will use different API calls.
 
@@ -117,8 +106,6 @@ To work around this issue (on macOS), you can use the following mirrord configur
 This configuration would make any certificate trusted for the process.
 
 ## Agent connection fails or drops when using an ephemeral agent with a service mesh
-
-> **Platform:** Service mesh clusters
 
 When running the agent as an ephemeral container, the agent shares the network stack with the target pod. This means that incoming connections to the agent are handled by the service mesh, which might drop it for various reasons (lack of TLS, not HTTP, etc.) To work around that, set the agent.port to be static using `agent.port` in values.yaml when installing the operator, then add a port exclusion for the agent port in your service mesh's configuration. For example, if you use Istio and have set the agent port to 5000, you can add the following annotation for exclusion:
 
