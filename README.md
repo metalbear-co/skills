@@ -1,5 +1,5 @@
-![Mirrord Agent Skills](assets/mirrord-agent-skills.png)
-# Mirrord Agent Skills
+![mirrord Agent Skills](assets/mirrord-agent-skills.png)
+# mirrord Agent Skills
 
 A collection of skills for AI coding agents to work with MetalBear's mirrord. Skills are packaged instructions and scripts that extend agent capabilities for Kubernetes development workflows.
 
@@ -26,6 +26,7 @@ npx skills add metalbear-co/skills
 | [mirrord-config](./skills/mirrord-config/) | Generate and validate mirrord.json configs |
 | [mirrord-quickstart](./skills/mirrord-quickstart/) | Get started with mirrord from zero |
 | [mirrord-operator](./skills/mirrord-operator/) | Set up operator for team environments |
+| [mirrord-ci](./skills/mirrord-ci/) | Set up mirrord in CI pipelines |
 | [mirrord-db-branching](./skills/mirrord-db-branching/) | Configure isolated database branches for development |
 
 
@@ -39,6 +40,7 @@ Skills are automatically available once installed. The agent will use them when 
 - "I'm new to mirrord, how do I get started?"
 - "Help me connect my local Python app to my staging Kubernetes cluster"
 - "Install mirrord operator for my team"
+- "Set up mirrord for my GitHub Actions CI pipeline"
 
 ## Skill Structure
 
