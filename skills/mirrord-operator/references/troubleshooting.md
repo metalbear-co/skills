@@ -1,5 +1,7 @@
 # Common Issues
 
+> Source: https://github.com/metalbear-co/docs/tree/main/docs/troubleshooting
+
 ## "Operator not found" when running mirrord
 
 The mirrord client cannot find or connect to the operator in the cluster.

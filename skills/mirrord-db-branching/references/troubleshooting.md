@@ -1,5 +1,7 @@
 # Common Issues
 
+> Source: https://github.com/metalbear-co/docs/tree/main/docs/troubleshooting
+
 ## Branch creation times out or is very slow
 
 This is often caused by using `"mode": "all"` on a large database. The `all` mode copies the entire database including all data, which can take a long time for databases with significant data.
