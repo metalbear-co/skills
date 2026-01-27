@@ -1,9 +1,5 @@
 # Common Issues
 
-> **Source:** https://github.com/metalbear-co/docs/tree/main/docs/troubleshooting
->
-> Unless noted, solutions apply to all mirrord versions and platforms.
-
 ## I've run my program with mirrord, but it seems to have no effect
 
 There are currently two known cases where mirrord cannot load into the application's process:
@@ -144,26 +140,6 @@ Remix and Vite use the `NODE_ENV` environment variable to determine the runtime 
         "NODE_ENV": "development"
       }
     }
-  }
-}
-```
-
-## Response headers not being injected
-
-> **Requires:** mirrord-agent 3.163.0+
-
-When debugging, it's useful to know how a response was handled by mirrord after being intercepted. The `mirrord-agent` header indicates whether traffic was forwarded to the local process or passed through.
-
-**Header values:**
-- `forwarded-to-client`: mirrord intercepted the request, sent it to the local process, and returned the response
-- `passed-through`: mirrord intercepted but forwarded to the original destination (e.g., didn't match filters)
-
-**Solution:** Enable header injection (disabled by default):
-
-```json
-{
-  "agent": {
-    "inject_headers": true
   }
 }
 ```

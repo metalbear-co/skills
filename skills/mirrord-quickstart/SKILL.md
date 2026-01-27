@@ -18,14 +18,6 @@ Help new users get mirrord running quickly:
 
 ## Critical First Steps
 
-**Step 0: Load references**
-Read the reference files from this skill's `references/` directory:
-- `references/troubleshooting.md` - Common issues and solutions
-
-If using absolute paths, search for them using patterns like `**/mirrord-quickstart/references/*`.
-
-Some troubleshooting solutions require specific minimum versions - check `mirrord --version` and the version requirements in troubleshooting.md.
-
 **Step 1: Detect user's environment**
 Ask or detect:
 - Operating system (macOS, Linux, Windows)

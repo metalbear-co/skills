@@ -24,20 +24,6 @@ Trigger on questions like:
 - "Configure mirrord licensing"
 - "Operator not working"
 
-## Critical First Steps
-
-**Step 0: Check mirrord version**
-```bash
-mirrord --version
-```
-Note the version - some troubleshooting solutions require specific minimum versions. Check `references/troubleshooting.md` for version requirements per issue.
-
-**Step 1: Load references**
-Read the reference files from this skill's `references/` directory:
-- `references/troubleshooting.md` - Common issues and solutions
-
-If using absolute paths, search for them using patterns like `**/mirrord-operator/references/*`.
-
 ## Prerequisites
 
 Before operator setup, verify:

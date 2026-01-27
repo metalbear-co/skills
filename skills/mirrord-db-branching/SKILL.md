@@ -25,23 +25,16 @@ For complete documentation, see:
 
 ## Critical First Steps
 
-**Step 0: Check mirrord version**
-```bash
-mirrord --version
-```
-Note the version - DB branching has specific version requirements (see Step 1). Check `references/troubleshooting.md` for version requirements per issue.
-
-**Step 1: Load references**
-Read the reference files from this skill's `references/` directory:
+**Step 0: Load the Schema**
+Read the schema file from this skill's `references/` directory:
 - `references/db-branches-schema.json` - Authoritative JSON Schema for db_branches configuration
-- `references/troubleshooting.md` - Common issues and solutions
 
 The schema is derived from the official mirrord schema at:
 https://raw.githubusercontent.com/metalbear-co/mirrord/main/mirrord-schema.json
 
-If using absolute paths, search for references using patterns like `**/mirrord-db-branching/references/*`.
+If using absolute paths, search for the schema using patterns like `**/mirrord-db-branching/references/*`.
 
-**Step 2: Verify Prerequisites**
+**Step 1: Verify Prerequisites**
 
 For MySQL:
 - Operator 3.129.0+, mirrord CLI 3.160.0+, Helm chart 1.37.0+
@@ -51,10 +44,10 @@ For PostgreSQL:
 - Operator 3.131.0+, mirrord CLI 3.175.0+, Helm chart 1.40.2+
 - Helm chart must have `operator.pgBranching: true`
 
-**Step 3: Identify Connection Environment Variable**
+**Step 2: Identify Connection Environment Variable**
 The application must use an environment variable for the database connection string. mirrord will override this variable with the branch connection URL.
 
-**Step 4: Validate Configuration**
+**Step 3: Validate Configuration**
 After generating any config, ALWAYS run:
 ```bash
 mirrord verify-config /path/to/config.json

@@ -27,12 +27,6 @@ Trigger on questions like:
 
 ## Critical First Steps
 
-**Step 0: Check mirrord version**
-```bash
-mirrord --version
-```
-Note the version - some troubleshooting solutions require specific minimum versions. Check `references/troubleshooting.md` for version requirements per issue.
-
 **Step 1: Load references**
 Read the reference files from this skill's `references/` directory:
 - `references/schema.json` - Authoritative mirrord JSON Schema

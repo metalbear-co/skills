@@ -18,17 +18,10 @@ Generate and validate `mirrord.json` configuration files:
 
 ## Critical First Steps
 
-**Step 0: Check mirrord version**
-```bash
-mirrord --version
-```
-Note the version - some troubleshooting solutions require specific minimum versions. Check `references/troubleshooting.md` for version requirements per issue.
-
 **Step 1: Load references**
-Read the reference files from this skill's `references/` directory:
+Read BOTH reference files from this skill's `references/` directory:
 1. `references/schema.json` - Authoritative JSON Schema
 2. `references/configuration.md` - Configuration reference
-3. `references/troubleshooting.md` - Common issues and solutions
 
 If using absolute paths, these are located relative to this skill's installation directory. Search for them if needed using patterns like `**/mirrord-config/references/*`.
 
