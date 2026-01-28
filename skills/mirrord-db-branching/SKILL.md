@@ -25,9 +25,10 @@ For complete documentation, see:
 
 ## Critical First Steps
 
-**Step 0: Load the Schema**
-Read the schema file from this skill's `references/` directory:
+**Step 0: Load References**
+Read the reference files from this skill's `references/` directory:
 - `references/db-branches-schema.json` - Authoritative JSON Schema for db_branches configuration
+- `references/troubleshooting.md` - Common issues and solutions
 
 The schema is derived from the official mirrord schema at:
 https://raw.githubusercontent.com/metalbear-co/mirrord/main/mirrord-schema.json

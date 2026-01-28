@@ -1,5 +1,7 @@
 # Common Issues
 
+> Source: https://github.com/metalbear-co/docs/tree/main/docs/troubleshooting
+
 ## I've run my program with mirrord, but it seems to have no effect
 
 There are currently two known cases where mirrord cannot load into the application's process:

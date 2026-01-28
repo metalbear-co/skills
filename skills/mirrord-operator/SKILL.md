@@ -24,6 +24,11 @@ Trigger on questions like:
 - "Configure mirrord licensing"
 - "Operator not working"
 
+## References
+
+Read troubleshooting guidance from this skill's `references/` directory:
+- `references/troubleshooting.md` - Common operator issues and solutions
+
 ## Prerequisites
 
 Before operator setup, verify:
