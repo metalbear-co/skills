@@ -36,11 +36,15 @@ kubectl get secret -n mirrord mirrord-operator-license -o jsonpath='{.data.key}'
 kubectl logs -n mirrord -l app=mirrord-operator | grep -i license
 ```
 
-3. If the license expired, contact MetalBear for renewal or reinstall with a new key:
+3. If the license expired, contact MetalBear for renewal. Then update the license secret and upgrade:
 ```bash
+kubectl create secret generic mirrord-license \
+  --from-literal=key=<NEW_LICENSE_KEY> \
+  -n mirrord --dry-run=client -o yaml | kubectl apply -f -
 helm upgrade mirrord-operator metalbear/mirrord-operator \
   --namespace mirrord \
-  --set license.key=<NEW_LICENSE_KEY>
+  --set license.keyRef.secretName=mirrord-license \
+  --set license.keyRef.secretKey=key
 ```
 
 ## "Permission denied" when using mirrord with operator

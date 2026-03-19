@@ -26,7 +26,7 @@ This skill helps AI agents guide new users through:
 | Method | Command |
 |--------|---------|
 | Homebrew | `brew install metalbear-co/mirrord/mirrord` |
-| Script | `curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh \| bash` |
+| Binary | Download from [GitHub Releases](https://github.com/metalbear-co/mirrord/releases) |
 | VS Code | Search "mirrord" in Extensions |
 | IntelliJ | Search "mirrord" in Plugins |
 

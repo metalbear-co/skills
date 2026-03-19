@@ -37,20 +37,29 @@ If kubectl fails, help them configure it first.
 
 ### CLI (recommended for getting started)
 
-**macOS/Linux:**
+**macOS (Homebrew):**
 ```bash
 brew install metalbear-co/mirrord/mirrord
 ```
 
-Or without brew:
+**Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+# Option 1: Using apt (Debian/Ubuntu)
+# See https://mirrord.dev/docs/overview/quick-start/ for repo setup
+
+# Option 2: Download binary from official GitHub releases
+# Visit https://github.com/metalbear-co/mirrord/releases
+# Download the appropriate binary for your architecture, verify the checksum, then:
+chmod +x mirrord
+sudo mv mirrord /usr/local/bin/
 ```
 
 **Windows:**
 ```bash
 choco install mirrord
 ```
+
+> **Security:** Always install mirrord through a package manager or by downloading the binary directly from the official GitHub Releases page. Verify checksums when downloading binaries manually. Do not run install scripts piped from the internet.
 
 **Verify installation:**
 ```bash
