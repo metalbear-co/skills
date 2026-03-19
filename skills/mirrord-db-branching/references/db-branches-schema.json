@@ -1,0 +1,519 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "mirrord DB Branches Configuration Schema",
+  "description": "JSON Schema for db_branches configuration in mirrord.json. Source: https://raw.githubusercontent.com/metalbear-co/mirrord/main/mirrord-schema.json",
+  "type": "object",
+  "properties": {
+    "db_branches": {
+      "title": "feature.db_branches",
+      "description": "A list of configurations for database branches.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/DatabaseBranchConfig"
+      }
+    }
+  },
+  "definitions": {
+    "DatabaseBranchConfig": {
+      "description": "Configuration for a database branch.",
+      "oneOf": [
+        {
+          "description": "MongoDB branch configuration. Set `type` to `mongodb`.",
+          "type": "object",
+          "required": ["connection", "type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["mongodb"]
+            },
+            "connection": {
+              "$ref": "#/definitions/DbBranchingConnectionSource"
+            },
+            "copy": {
+              "default": { "mode": "empty", "collections": null },
+              "$ref": "#/definitions/MongodbBranchCopyConfig"
+            },
+            "creation_timeout_secs": {
+              "description": "Timeout in seconds to wait for branch to become ready. Defaults to 60.",
+              "default": 60,
+              "type": "integer",
+              "minimum": 0
+            },
+            "id": {
+              "description": "Unique identifier for reusing/sharing branches.",
+              "type": ["string", "null"]
+            },
+            "name": {
+              "description": "Database name when not accessible from connection.",
+              "type": ["string", "null"]
+            },
+            "ttl_secs": {
+              "description": "Time-to-live in seconds. Default 300, max 900 (15 min).",
+              "default": 300,
+              "type": "integer",
+              "minimum": 0
+            },
+            "version": {
+              "description": "Database image version.",
+              "type": ["string", "null"]
+            }
+          }
+        },
+        {
+          "description": "MySQL branch configuration. Set `type` to `mysql`.",
+          "type": "object",
+          "required": ["connection", "type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["mysql"]
+            },
+            "connection": {
+              "$ref": "#/definitions/DbBranchingConnectionSource"
+            },
+            "copy": {
+              "default": { "mode": "empty", "tables": null },
+              "$ref": "#/definitions/MysqlBranchCopyConfig"
+            },
+            "creation_timeout_secs": {
+              "description": "Timeout in seconds to wait for branch to become ready. Defaults to 60.",
+              "default": 60,
+              "type": "integer",
+              "minimum": 0
+            },
+            "id": {
+              "description": "Unique identifier for reusing/sharing branches.",
+              "type": ["string", "null"]
+            },
+            "name": {
+              "description": "Database name when not accessible from connection.",
+              "type": ["string", "null"]
+            },
+            "ttl_secs": {
+              "description": "Time-to-live in seconds. Default 300, max 900 (15 min).",
+              "default": 300,
+              "type": "integer",
+              "minimum": 0
+            },
+            "version": {
+              "description": "Database image version (e.g., '8.0').",
+              "type": ["string", "null"]
+            }
+          }
+        },
+        {
+          "description": "PostgreSQL branch configuration. Set `type` to `pg`.",
+          "type": "object",
+          "required": ["connection", "type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["pg"]
+            },
+            "connection": {
+              "$ref": "#/definitions/DbBranchingConnectionSource"
+            },
+            "copy": {
+              "default": { "mode": "empty", "tables": null },
+              "$ref": "#/definitions/PgBranchCopyConfig"
+            },
+            "creation_timeout_secs": {
+              "description": "Timeout in seconds to wait for branch to become ready. Defaults to 60.",
+              "default": 60,
+              "type": "integer",
+              "minimum": 0
+            },
+            "iam_auth": {
+              "description": "IAM authentication for AWS RDS or GCP Cloud SQL.",
+              "anyOf": [
+                { "$ref": "#/definitions/PgIamAuthConfig" },
+                { "type": "null" }
+              ]
+            },
+            "id": {
+              "description": "Unique identifier for reusing/sharing branches.",
+              "type": ["string", "null"]
+            },
+            "name": {
+              "description": "Database name when not accessible from connection.",
+              "type": ["string", "null"]
+            },
+            "ttl_secs": {
+              "description": "Time-to-live in seconds. Default 300, max 900 (15 min).",
+              "default": 300,
+              "type": "integer",
+              "minimum": 0
+            },
+            "version": {
+              "description": "Database image version (e.g., '16').",
+              "type": ["string", "null"]
+            }
+          }
+        },
+        {
+          "description": "Redis branch configuration. Set `type` to `redis`.",
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["redis"]
+            },
+            "connection": {
+              "$ref": "#/definitions/RedisConnectionConfig"
+            },
+            "id": {
+              "description": "Unique identifier for reusing branches.",
+              "type": ["string", "null"]
+            },
+            "local": {
+              "$ref": "#/definitions/RedisLocalConfig"
+            },
+            "location": {
+              "description": "Where Redis should run: 'local' or 'remote'.",
+              "default": "remote",
+              "type": "string",
+              "enum": ["local", "remote"]
+            }
+          }
+        }
+      ]
+    },
+    "DbBranchingConnectionSource": {
+      "description": "Connection source configuration using environment variables.",
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": {
+          "$ref": "#/definitions/DbBranchingConnectionSourceKind"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DbBranchingConnectionSourceKind": {
+      "description": "Environment variable source for connection.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "variable"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["env"]
+            },
+            "variable": {
+              "type": "string"
+            },
+            "container": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "variable"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["env_from"]
+            },
+            "variable": {
+              "type": "string"
+            },
+            "container": {
+              "type": ["string", "null"]
+            }
+          }
+        }
+      ]
+    },
+    "MysqlBranchCopyConfig": {
+      "description": "MySQL copy mode configuration.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["empty"] },
+            "tables": {
+              "type": ["object", "null"],
+              "additionalProperties": { "$ref": "#/definitions/TableCopyConfig" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["schema"] },
+            "tables": {
+              "type": ["object", "null"],
+              "additionalProperties": { "$ref": "#/definitions/TableCopyConfig" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["all"] }
+          }
+        }
+      ]
+    },
+    "PgBranchCopyConfig": {
+      "description": "PostgreSQL copy mode configuration.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["empty"] },
+            "tables": {
+              "type": ["object", "null"],
+              "additionalProperties": { "$ref": "#/definitions/TableCopyConfig" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["schema"] },
+            "tables": {
+              "type": ["object", "null"],
+              "additionalProperties": { "$ref": "#/definitions/TableCopyConfig" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["all"] }
+          }
+        }
+      ]
+    },
+    "MongodbBranchCopyConfig": {
+      "description": "MongoDB copy mode configuration.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["empty"] },
+            "collections": {
+              "type": ["object", "null"],
+              "additionalProperties": { "$ref": "#/definitions/CollectionCopyConfig" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["all"] },
+            "collections": {
+              "type": ["object", "null"],
+              "additionalProperties": { "$ref": "#/definitions/CollectionCopyConfig" }
+            }
+          }
+        }
+      ]
+    },
+    "TableCopyConfig": {
+      "description": "Configuration for copying a specific table with optional filter.",
+      "type": "object",
+      "properties": {
+        "filter": {
+          "description": "SQL WHERE clause filter for rows to copy.",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "CollectionCopyConfig": {
+      "description": "Configuration for copying a MongoDB collection with optional filter.",
+      "type": "object",
+      "properties": {
+        "filter": {
+          "description": "MongoDB query filter in JSON format.",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "PgIamAuthConfig": {
+      "description": "IAM authentication configuration for PostgreSQL.",
+      "oneOf": [
+        {
+          "description": "AWS RDS IAM authentication.",
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "type": "string", "enum": ["aws_rds"] },
+            "region": {
+              "anyOf": [
+                { "$ref": "#/definitions/DbBranchingConnectionSourceKind" },
+                { "type": "null" }
+              ]
+            },
+            "access_key_id": {
+              "anyOf": [
+                { "$ref": "#/definitions/DbBranchingConnectionSourceKind" },
+                { "type": "null" }
+              ]
+            },
+            "secret_access_key": {
+              "anyOf": [
+                { "$ref": "#/definitions/DbBranchingConnectionSourceKind" },
+                { "type": "null" }
+              ]
+            },
+            "session_token": {
+              "anyOf": [
+                { "$ref": "#/definitions/DbBranchingConnectionSourceKind" },
+                { "type": "null" }
+              ]
+            }
+          }
+        },
+        {
+          "description": "GCP Cloud SQL IAM authentication. Requires TLS (sslmode=require).",
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "type": "string", "enum": ["gcp_cloud_sql"] },
+            "credentials_json": {
+              "anyOf": [
+                { "$ref": "#/definitions/DbBranchingConnectionSourceKind" },
+                { "type": "null" }
+              ]
+            },
+            "credentials_path": {
+              "anyOf": [
+                { "$ref": "#/definitions/DbBranchingConnectionSourceKind" },
+                { "type": "null" }
+              ]
+            },
+            "project": {
+              "anyOf": [
+                { "$ref": "#/definitions/DbBranchingConnectionSourceKind" },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "RedisConnectionConfig": {
+      "description": "Redis connection configuration. Supports URL or separated parameters.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "Complete Redis URL (e.g., redis://user:pass@host:6379/0).",
+          "anyOf": [
+            { "$ref": "#/definitions/RedisValueSource" },
+            { "type": "null" }
+          ]
+        },
+        "host": {
+          "anyOf": [
+            { "$ref": "#/definitions/RedisValueSource" },
+            { "type": "null" }
+          ]
+        },
+        "port": {
+          "type": ["integer", "null"],
+          "default": 6379,
+          "minimum": 0
+        },
+        "password": {
+          "anyOf": [
+            { "$ref": "#/definitions/RedisValueSource" },
+            { "type": "null" }
+          ]
+        },
+        "username": {
+          "anyOf": [
+            { "$ref": "#/definitions/RedisValueSource" },
+            { "type": "null" }
+          ]
+        },
+        "database": {
+          "type": ["integer", "null"],
+          "default": 0,
+          "minimum": 0
+        },
+        "tls": {
+          "type": ["boolean", "null"]
+        }
+      }
+    },
+    "RedisLocalConfig": {
+      "description": "Local Redis runtime configuration.",
+      "type": "object",
+      "properties": {
+        "runtime": {
+          "description": "Runtime backend: 'container', 'redis_server', or 'auto'.",
+          "type": "string",
+          "enum": ["container", "redis_server", "auto"],
+          "default": "container"
+        },
+        "container_runtime": {
+          "description": "Container runtime: 'docker', 'podman', or 'nerdctl'.",
+          "type": "string",
+          "enum": ["docker", "podman", "nerdctl"],
+          "default": "docker"
+        },
+        "container_command": {
+          "description": "Custom path to container command.",
+          "type": ["string", "null"]
+        },
+        "server_command": {
+          "description": "Custom path to redis-server binary.",
+          "type": ["string", "null"]
+        },
+        "port": {
+          "description": "Local port to bind Redis to.",
+          "type": "integer",
+          "default": 6379,
+          "minimum": 0
+        },
+        "version": {
+          "description": "Redis version/tag (default: '7-alpine').",
+          "type": "string",
+          "default": "7-alpine"
+        },
+        "options": {
+          "$ref": "#/definitions/RedisOptions"
+        }
+      }
+    },
+    "RedisOptions": {
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Raw arguments passed to redis-server.",
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "RedisValueSource": {
+      "description": "Source for Redis configuration value.",
+      "anyOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["type", "variable"],
+          "properties": {
+            "type": { "type": "string", "enum": ["env"] },
+            "variable": { "type": "string" },
+            "container": { "type": ["string", "null"] }
+          }
+        }
+      ]
+    }
+  }
+}
