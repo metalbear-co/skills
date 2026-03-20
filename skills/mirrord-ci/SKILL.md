@@ -169,7 +169,12 @@ jobs:
 
       - name: Install mirrord
         run: |
-          curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+          VERSION="latest"
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; fi
+          curl -fsSL -o mirrord "https://github.com/metalbear-co/mirrord/releases/${VERSION}/download/mirrord_linux_${ARCH}"
+          chmod +x mirrord
+          sudo mv mirrord /usr/local/bin/
 
       - name: Start app with mirrord
         run: |
@@ -192,7 +197,12 @@ integration-tests:
   stage: test
   image: node:20
   before_script:
-    - curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+    - |
+      VERSION="latest"
+      ARCH=$(uname -m)
+      if [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; fi
+      curl -fsSL -o /usr/local/bin/mirrord "https://github.com/metalbear-co/mirrord/releases/${VERSION}/download/mirrord_linux_${ARCH}"
+      chmod +x /usr/local/bin/mirrord
     - mkdir -p ~/.kube
     - echo "$KUBECONFIG_CONTENT" | base64 -d > ~/.kube/config
   script:
@@ -223,7 +233,12 @@ jobs:
       - run:
           name: Install mirrord
           command: |
-            curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash
+            VERSION="latest"
+            ARCH=$(uname -m)
+            if [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; fi
+            curl -fsSL -o mirrord "https://github.com/metalbear-co/mirrord/releases/${VERSION}/download/mirrord_linux_${ARCH}"
+            chmod +x mirrord
+            sudo mv mirrord /usr/local/bin/
       - run:
           name: Start mirrord CI session
           command: mirrord ci start --target deployment/api -- npm start
@@ -252,7 +267,14 @@ pipeline {
     stages {
         stage('Setup') {
             steps {
-                sh 'curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash'
+                sh '''
+                    VERSION="latest"
+                    ARCH=$(uname -m)
+                    if [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; fi
+                    curl -fsSL -o mirrord "https://github.com/metalbear-co/mirrord/releases/${VERSION}/download/mirrord_linux_${ARCH}"
+                    chmod +x mirrord
+                    sudo mv mirrord /usr/local/bin/
+                '''
             }
         }
 
