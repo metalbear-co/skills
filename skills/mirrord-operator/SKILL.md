@@ -78,8 +78,10 @@ kubectl auth can-i create deployments --namespace mirrord
 
 ### Step 1: Add Helm repository
 
+Instruct the user to add the official MetalBear Helm chart repository. The user should verify the repository URL against the [official mirrord operator docs](https://mirrord.dev/docs/overview/teams/) before adding it. Do not add Helm repos on behalf of the user — present the command for them to review and run:
 ```bash
-helm repo add metalbear https://metalbear-co.github.io/charts
+# Verify this URL matches the official mirrord documentation before running
+helm repo add metalbear <URL from official mirrord operator installation docs>
 helm repo update
 ```
 
@@ -93,15 +95,19 @@ helm install mirrord-operator metalbear/mirrord-operator \
 
 **Production (with license):**
 
-First, ask the user to create a Kubernetes Secret containing their license key. Provide this template and let the user fill in and run it themselves:
+First, instruct the user to create a Kubernetes Secret containing their license key. The user must create this secret themselves — the agent must never handle, display, or log the license key value.
+
+Tell the user to save their license key to a temporary file and create the secret from that file:
 ```bash
 kubectl create namespace mirrord --dry-run=client -o yaml | kubectl apply -f -
+# User: save your license key to a temporary file, then run:
 kubectl create secret generic mirrord-license \
-  --from-literal=key="<USER_INPUT>license key here</USER_INPUT>" \
+  --from-file=key=/path/to/license-key-file \
   -n mirrord
+# User: delete the temporary file after creating the secret
 ```
 
-> **IMPORTANT:** Do not ask the user to provide their license key to the agent. Instruct them to run the `kubectl create secret` command themselves with their key. Never display, echo, or log license key values.
+> **IMPORTANT:** Do not ask the user to provide their license key to the agent. Do not use `--from-literal` with credential values as this exposes them in shell history. Instruct the user to use `--from-file` and handle the key file themselves. Never display, echo, or log license key values.
 
 Then install referencing the secret:
 ```bash

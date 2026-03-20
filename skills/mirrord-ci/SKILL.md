@@ -169,12 +169,7 @@ jobs:
 
       - name: Install mirrord
         run: |
-          VERSION="latest"
-          ARCH=$(uname -m)
-          if [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; fi
-          curl -fsSL -o mirrord "https://github.com/metalbear-co/mirrord/releases/${VERSION}/download/mirrord_linux_${ARCH}"
-          chmod +x mirrord
-          sudo mv mirrord /usr/local/bin/
+          brew install metalbear-co/mirrord/mirrord
 
       - name: Start app with mirrord
         run: |
@@ -198,11 +193,11 @@ integration-tests:
   image: node:20
   before_script:
     - |
-      VERSION="latest"
-      ARCH=$(uname -m)
-      if [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; fi
-      curl -fsSL -o /usr/local/bin/mirrord "https://github.com/metalbear-co/mirrord/releases/${VERSION}/download/mirrord_linux_${ARCH}"
-      chmod +x /usr/local/bin/mirrord
+      # Install mirrord - use your organization's approved installation method
+      # See https://mirrord.dev/docs/overview/quick-start/ for options
+      # Option A: Pre-install mirrord in your CI Docker image
+      # Option B: Use a pinned version from GitHub Releases with checksum verification
+      mirrord --version  # Verify mirrord is available
     - mkdir -p ~/.kube
     - echo "$KUBECONFIG_CONTENT" | base64 -d > ~/.kube/config
   script:
@@ -233,12 +228,8 @@ jobs:
       - run:
           name: Install mirrord
           command: |
-            VERSION="latest"
-            ARCH=$(uname -m)
-            if [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; fi
-            curl -fsSL -o mirrord "https://github.com/metalbear-co/mirrord/releases/${VERSION}/download/mirrord_linux_${ARCH}"
-            chmod +x mirrord
-            sudo mv mirrord /usr/local/bin/
+            # Install mirrord via Homebrew (recommended for CI)
+            brew install metalbear-co/mirrord/mirrord
       - run:
           name: Start mirrord CI session
           command: mirrord ci start --target deployment/api -- npm start
@@ -268,12 +259,9 @@ pipeline {
         stage('Setup') {
             steps {
                 sh '''
-                    VERSION="latest"
-                    ARCH=$(uname -m)
-                    if [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; fi
-                    curl -fsSL -o mirrord "https://github.com/metalbear-co/mirrord/releases/${VERSION}/download/mirrord_linux_${ARCH}"
-                    chmod +x mirrord
-                    sudo mv mirrord /usr/local/bin/
+                    # Install mirrord via Homebrew or your organization's approved method
+                    # See https://mirrord.dev/docs/overview/quick-start/
+                    brew install metalbear-co/mirrord/mirrord
                 '''
             }
         }

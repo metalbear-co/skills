@@ -26,9 +26,9 @@ The operator rejects connections due to licensing issues.
 
 **Solution:**
 
-1. Verify your license key is correctly set:
+1. Verify the license secret exists and is populated:
 ```bash
-kubectl get secret -n mirrord mirrord-operator-license -o jsonpath='{.data.key}' | base64 -d
+kubectl get secret -n mirrord mirrord-license
 ```
 
 2. Check operator logs for license-related errors:
@@ -36,11 +36,13 @@ kubectl get secret -n mirrord mirrord-operator-license -o jsonpath='{.data.key}'
 kubectl logs -n mirrord -l app=mirrord-operator | grep -i license
 ```
 
-3. If the license expired, contact MetalBear for renewal. Then update the license secret and upgrade:
+3. If the license expired, contact MetalBear for renewal. Then update the license secret using `--from-file` (save the new key to a temporary file first):
 ```bash
+# Save your new license key to a temporary file, then:
 kubectl create secret generic mirrord-license \
-  --from-literal=key=<NEW_LICENSE_KEY> \
+  --from-file=key=/path/to/new-license-key-file \
   -n mirrord --dry-run=client -o yaml | kubectl apply -f -
+# Delete the temporary file after updating the secret
 helm upgrade mirrord-operator metalbear/mirrord-operator \
   --namespace mirrord \
   --set license.keyRef.secretName=mirrord-license \

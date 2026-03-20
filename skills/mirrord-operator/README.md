@@ -30,10 +30,7 @@ This skill helps AI agents:
 
 ## Quick install
 
-```bash
-helm repo add mirrord https://metalbear-co.github.io/mirrord-operator
-helm install mirrord-operator mirrord/mirrord-operator --namespace mirrord --create-namespace
-```
+Follow the [official mirrord operator installation guide](https://mirrord.dev/docs/overview/teams/) to add the Helm repository and install the operator. Verify the Helm repo URL against official documentation before use.
 
 ## Learn more
 
