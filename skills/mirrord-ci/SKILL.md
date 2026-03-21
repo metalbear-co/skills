@@ -3,7 +3,7 @@ name: mirrord-ci
 description: Help users set up mirrord in CI pipelines for testing against real Kubernetes environments. Use when users want to run end-to-end tests, integration tests, or automated tests in CI using mirrord to connect to staging/shared clusters.
 metadata:
   author: MetalBear
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Mirrord CI Skill
@@ -24,6 +24,11 @@ Trigger on questions like:
 - "Run tests against staging in CI"
 - "mirrord ci start not working"
 - "Configure mirrord for GitLab CI"
+
+## Security note for CI examples
+
+- **Do not** use remote pipe-to-shell installs or other unverified script execution in CI to install mirrord.
+- Pre-install mirrord in a **trusted CI image**, use your org’s **approved** package manager with pinned versions, or follow [official install docs](https://mirrord.dev/docs/overview/quick-start/). The YAML below assumes `mirrord` is already available on the runner unless you add an approved install step.
 
 ## Critical First Steps
 
@@ -167,9 +172,11 @@ jobs:
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
 
-      - name: Install mirrord
+      - name: Ensure mirrord is installed
         run: |
-          brew install metalbear-co/mirrord/mirrord
+          # Use a pre-built runner image that includes mirrord, or install via your org's approved method.
+          # See https://mirrord.dev/docs/overview/quick-start/ — do not pipe remote install scripts.
+          mirrord --version
 
       - name: Start app with mirrord
         run: |
@@ -226,10 +233,10 @@ jobs:
             mkdir -p ~/.kube
             echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
       - run:
-          name: Install mirrord
+          name: Ensure mirrord is installed
           command: |
-            # Install mirrord via Homebrew (recommended for CI)
-            brew install metalbear-co/mirrord/mirrord
+            # Pre-install mirrord in the image or use an org-approved install path (see mirrord docs).
+            mirrord --version
       - run:
           name: Start mirrord CI session
           command: mirrord ci start --target deployment/api -- npm start
@@ -259,9 +266,8 @@ pipeline {
         stage('Setup') {
             steps {
                 sh '''
-                    # Install mirrord via Homebrew or your organization's approved method
-                    # See https://mirrord.dev/docs/overview/quick-start/
-                    brew install metalbear-co/mirrord/mirrord
+                    # Ensure mirrord exists on the agent (pre-installed image or org-approved install)
+                    mirrord --version
                 '''
             }
         }

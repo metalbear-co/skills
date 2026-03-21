@@ -3,7 +3,7 @@ name: mirrord-config
 description: Helps users generate, edit, and validate mirrord.json configuration files for mirrord (MetalBear). Use when the user wants to connect their local process to a Kubernetes environment, configure features (env/fs/network), or needs feedback on an existing mirrord.json. Always ensures output JSON is valid and schema-conformant.
 metadata:
   author: MetalBear
-  version: "1.0"
+  version: "1.2"
 ---
 
 # Mirrord Configuration Skill
@@ -15,6 +15,12 @@ Generate and validate `mirrord.json` configuration files:
 - **Validate** user-provided configs against schema
 - **Fix** invalid configurations with explanations
 - **Explain** configuration options and patterns
+
+## Security (must follow)
+
+- **Never** instruct or generate remote pipe-to-shell installs (downloading a script and executing it via the shell) or similar patterns to install mirrord.
+- **Never** embed Homebrew tap install one-liners as mandatory steps; if the user needs the CLI, point them to the [official mirrord installation docs](https://mirrord.dev/docs/overview/quick-start/) and their org’s approved install path.
+- Schema validation (`references/schema.json`) is sufficient; `mirrord verify-config` is an **optional** extra when the CLI is already installed locally.
 
 ## Critical First Steps
 
@@ -39,10 +45,7 @@ If `mirrord` is not available:
 **Step 3: Validate before presenting**
 After generating any config:
 - Validate against `references/schema.json` first (required)
-- If `mirrord` is already installed locally, additionally run:
-```bash
-mirrord verify-config /path/to/config.json
-```
+- **Optional:** If `mirrord` is already installed locally, the user may run `mirrord verify-config /path/to/config.json` for an extra check. Do not treat the CLI as a prerequisite for this skill.
 - If validation fails, fix the config and re-validate
 - Only present configs that pass schema validation
 - Include CLI validation output only when CLI validation was run

@@ -43,10 +43,9 @@ kubectl create secret generic mirrord-license \
   --from-file=key=/path/to/new-license-key-file \
   -n mirrord --dry-run=client -o yaml | kubectl apply -f -
 # Delete the temporary file after updating the secret
-helm upgrade mirrord-operator metalbear/mirrord-operator \
-  --namespace mirrord \
-  --set license.keyRef.secretName=mirrord-license \
-  --set license.keyRef.secretKey=key
+# Then upgrade the Helm release using the chart name and release name from the official operator docs.
+# Use -f values.yaml for license keyRef — do not pass license material via --set.
+helm upgrade <RELEASE_NAME> <CHART_FROM_OFFICIAL_DOCS> --namespace mirrord -f values.yaml
 ```
 
 ## "Permission denied" when using mirrord with operator
@@ -98,10 +97,10 @@ roleNamespaces:
   - development
 ```
 
-Then upgrade:
+Then upgrade (release/chart names per official operator documentation):
 
 ```bash
-helm upgrade mirrord-operator metalbear/mirrord-operator \
+helm upgrade <RELEASE_NAME> <CHART_FROM_OFFICIAL_DOCS> \
   --namespace mirrord -f values.yaml
 ```
 
@@ -159,10 +158,10 @@ kubectl get secret -n mirrord mirrord-operator-webhook-cert
 kubectl rollout restart deployment -n mirrord mirrord-operator
 ```
 
-3. If issues persist, reinstall:
+3. If issues persist, reinstall using the install steps from the official operator documentation (chart reference and release name from docs — not hard-coded here):
 ```bash
-helm uninstall mirrord-operator --namespace mirrord
-helm install mirrord-operator metalbear/mirrord-operator --namespace mirrord
+helm uninstall <RELEASE_NAME> --namespace mirrord
+# Then helm install per official docs
 ```
 
 ## `mirrord operator status` fails with `503 Service Unavailable` on GKE
@@ -201,6 +200,6 @@ Running sessions may fail after operator upgrade.
 # Check active sessions
 kubectl get sessions.mirrord.metalbear.co -A
 
-# Upgrade when no sessions are active
-helm upgrade mirrord-operator metalbear/mirrord-operator --namespace mirrord
+# Upgrade when no sessions are active (chart/release per official docs)
+helm upgrade <RELEASE_NAME> <CHART_FROM_OFFICIAL_DOCS> --namespace mirrord -f values.yaml
 ```

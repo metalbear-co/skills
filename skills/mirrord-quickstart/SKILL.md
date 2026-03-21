@@ -3,7 +3,7 @@ name: mirrord-quickstart
 description: Guide users from zero to their first working mirrord session. Use when a user is new to mirrord, wants to install it, or needs help running their first session connecting to a Kubernetes cluster.
 metadata:
   author: MetalBear
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Mirrord Quickstart Skill
@@ -37,29 +37,15 @@ If kubectl fails, help them configure it first.
 
 ### CLI (recommended for getting started)
 
-**macOS (Homebrew):**
-```bash
-brew install metalbear-co/mirrord/mirrord
-```
+**Do not** run remote install scripts that pipe a network download into a shell interpreter. Use only methods your organization approves.
 
-**Linux:**
-```bash
-# Option 1: Using apt (Debian/Ubuntu)
-# See https://mirrord.dev/docs/overview/quick-start/ for repo setup
+**Official guide:** Follow [mirrord installation documentation](https://mirrord.dev/docs/overview/quick-start/) for supported options (package managers, pinned release binaries with checksum verification, etc.).
 
-# Option 2: Download binary from official GitHub releases
-# Visit https://github.com/metalbear-co/mirrord/releases
-# Download the appropriate binary for your architecture, verify the checksum, then:
-chmod +x mirrord
-sudo mv mirrord /usr/local/bin/
-```
+**Summary for the agent:**
+- **macOS / Linux:** Point the user to the official docs for Homebrew, apt, or pinned binary install steps — do not invent or paste one-liners that fetch and execute remote scripts.
+- **Windows:** Point the user to the official docs for supported installers.
 
-**Windows:**
-```bash
-choco install mirrord
-```
-
-> **Security:** Always install mirrord through a package manager or by downloading the binary directly from the official GitHub Releases page. Verify checksums when downloading binaries manually. Do not run install scripts piped from the internet.
+> **Security:** Prefer package managers or manually verified binaries from official release artifacts. Never execute installation by piping downloaded content into a shell.
 
 **Verify installation:**
 ```bash
@@ -141,7 +127,7 @@ mirrord exec --target pod/<pod-name> -- env | grep -i database
 **Response:**
 1. Ask: macOS/Linux/Windows? CLI or IDE?
 2. Check: `kubectl cluster-info` working?
-3. Install: One command based on their OS
+3. Install: Follow the official quick-start for their OS (no remote pipe-to-shell installs)
 4. Run: `mirrord ls` to see targets
 5. Connect: `mirrord exec --target pod/X -- <their-app>`
 6. Verify: Show them it's working
