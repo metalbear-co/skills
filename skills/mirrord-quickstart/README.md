@@ -23,12 +23,7 @@ This skill helps AI agents guide new users through:
 
 ## Installation options
 
-| Method | Command |
-|--------|---------|
-| Homebrew | `brew install metalbear-co/mirrord/mirrord` |
-| Binary | Download from [GitHub Releases](https://github.com/metalbear-co/mirrord/releases) |
-| VS Code | Search "mirrord" in Extensions |
-| IntelliJ | Search "mirrord" in Plugins |
+Use the [official installation guide](https://mirrord.dev/docs/overview/quick-start/) — avoid downloading and executing install scripts via the shell from the network. Options include approved package managers, pinned release binaries (verify checksums), VS Code, and IntelliJ.
 
 ## First session
 
