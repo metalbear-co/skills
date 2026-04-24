@@ -1,0 +1,14 @@
+{
+  "name": "mirrord",
+  "description": "Official mirrord skills for Claude Code — Kubernetes development workflows including config generation, quickstart, operator setup, CI integration, and database branching.",
+  "version": "1.0.0",
+  "author": {
+    "name": "MetalBear",
+    "email": "support@metalbear.com",
+    "url": "https://metalbear.co"
+  },
+  "homepage": "https://metalbear.co",
+  "repository": "https://github.com/metalbear-co/skills",
+  "license": "MIT",
+  "keywords": ["mirrord", "kubernetes", "k8s", "metalbear", "dev-tools"]
+}
