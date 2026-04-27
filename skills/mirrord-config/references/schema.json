@@ -806,7 +806,7 @@
         "database": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ParamSource"
+              "$ref": "#/$defs/SingleOrVec_ParamSource"
             },
             {
               "type": "null"
@@ -816,7 +816,7 @@
         "host": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ParamSource"
+              "$ref": "#/$defs/SingleOrVec_ParamSource"
             },
             {
               "type": "null"
@@ -826,7 +826,7 @@
         "password": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ParamSource"
+              "$ref": "#/$defs/SingleOrVec_ParamSource"
             },
             {
               "type": "null"
@@ -836,7 +836,7 @@
         "port": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ParamSource"
+              "$ref": "#/$defs/SingleOrVec_ParamSource"
             },
             {
               "type": "null"
@@ -846,7 +846,7 @@
         "user": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ParamSource"
+              "$ref": "#/$defs/SingleOrVec_ParamSource"
             },
             {
               "type": "null"
@@ -1400,7 +1400,7 @@
               ]
             },
             "url": {
-              "type": "string"
+              "$ref": "#/$defs/SingleOrVec_string"
             }
           },
           "additionalProperties": false,
@@ -1428,6 +1428,13 @@
             "type": {
               "type": "string",
               "const": "env"
+            },
+            "value": {
+              "description": "Literal value for this connection parameter. The CLI sends it to the\noperator, which stores it in a Kubernetes Secret for the branch pod.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "variable": {
               "type": "string"
@@ -1465,6 +1472,13 @@
         {
           "type": "object",
           "properties": {
+            "env_var_name": {
+              "description": "Name of the env var to set on the local process from the resolved\nSecret value. Same semantics as on `ParamSource::Secret`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "key": {
               "type": "string"
             },
@@ -2986,30 +3000,6 @@
         }
       ]
     },
-    "ParamSource": {
-      "description": "<!--${internal}-->\nA connection parameter source: either a plain env var name (string) or a Kubernetes Secret\nreference (object).\n\nAs a string: `\"DB_HOST\"` — resolved using the parent `type` field (env or env_from).\n\nAs an object: `{ \"secret\": \"my-secret\", \"key\": \"password\" }` — read directly from a\nKubernetes Secret.",
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "key": {
-              "type": "string"
-            },
-            "secret": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "secret",
-            "key"
-          ]
-        }
-      ]
-    },
     "PgBranchCopyConfig": {
       "description": "Users can choose from the following copy mode to bootstrap their PostgreSQL branch database:\n\n- Empty\n\n  Creates an empty database. If the source DB connection options are found from the chosen\n  target, mirrord operator extracts the database name and create an empty DB. Otherwise, mirrord\n  operator looks for the `name` field from the branch DB config object. This option is useful\n  for users that run DB migrations themselves before starting the application.\n\n- Schema\n\n  Creates an empty database and copies schema of all tables.\n\n- All\n\n  Copies both schema and data of all tables. This option shall only be used\n  when the data volume of the source database is minimal.",
       "oneOf": [
@@ -3551,6 +3541,12 @@
       "required": [
         "service"
       ]
+    },
+    "SingleOrVec_ParamSource": {
+      "x-kubernetes-preserve-unknown-fields": true
+    },
+    "SingleOrVec_string": {
+      "x-kubernetes-preserve-unknown-fields": true
     },
     "SplitQueuesConfig": {
       "description": "A mapping from queue ids to their filters. Each queue filter defines which messages from the\noriginal queue will be made available to the local application, based on message attributes\nor headers, and possibly on jq filters (for SQS).\n\nThe queue-ids have to match those defined in the `MirrordWorkloadQueueRegistry` for SQS and\nRabbitMQ or `MirrordKafkaTopicsConsumer` for Kafka.\n\n\n```json\n{\n  \"feature\": {\n    \"split_queues\": {\n      \"first-queue\": {\n        \"queue_type\": \"SQS\",\n        \"message_filter\": {\n          \"wows\": \"so wows\",\n          \"coolz\": \"^very\"\n        }\n      },\n      \"second-queue\": {\n        \"queue_type\": \"SQS\",\n        \"jq_filter\": \".Body | fromjson | .customer_email | test(\\\"metalbear\\\\\\\\.com\\\")\"\n      },\n      \"third-queue\": {\n        \"queue_type\": \"Kafka\",\n        \"message_filter\": {\n          \"who\": \"you$\"\n        }\n      },\n      \"fourth-queue\": {\n        \"queue_type\": \"Kafka\",\n        \"message_filter\": {\n          \"wows\": \"so wows\",\n          \"coolz\": \"^very\"\n        }\n      },\n    }\n  }\n}\n```",
