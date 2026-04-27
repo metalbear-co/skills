@@ -28,6 +28,7 @@ npx skills add metalbear-co/skills
 | [mirrord-operator](./skills/mirrord-operator/) | Set up operator for team environments |
 | [mirrord-ci](./skills/mirrord-ci/) | Set up mirrord in CI pipelines |
 | [mirrord-db-branching](./skills/mirrord-db-branching/) | Configure isolated database branches for development |
+| [mirrord-kafka](./skills/mirrord-kafka/) | Configure Kafka queue splitting with the mirrord operator |
 
 
 ## Usage
