@@ -69,8 +69,13 @@ spec:
 ```
 
 ### SASL PLAIN
+
+> **Security:** Never inline `sasl.password` (or any credential) as a literal value in generated YAML. Reference a Kubernetes Secret in the operator's namespace via `loadFromSecret`. The user creates the Secret themselves; the agent must not handle the password value.
+
 ```yaml
 spec:
+  # Secret in the operator namespace with keys: sasl.username, sasl.password
+  loadFromSecret: mirrord/kafka-sasl-creds
   properties:
   - name: bootstrap.servers
     value: kafka-broker:9093
@@ -78,10 +83,16 @@ spec:
     value: SASL_SSL
   - name: sasl.mechanism
     value: PLAIN
-  - name: sasl.username
-    value: mirrord-operator
-  - name: sasl.password
-    value: secret-password
+```
+
+The user creates the backing Secret from files, not literals (so credentials don't appear in shell history):
+```sh
+# User saves username/password to files, then:
+kubectl create secret generic kafka-sasl-creds \
+  --from-file=sasl.username=/path/to/username-file \
+  --from-file=sasl.password=/path/to/password-file \
+  -n mirrord
+# User: delete the temporary files after the Secret is created.
 ```
 
 ### SSL/mTLS (via secret)
