@@ -115,6 +115,7 @@ User wants changes to their config.
 - mirrord uses Tera templates
 - Example: `"target": "{{ get_env(name=\"TARGET\", default=\"pod/fallback\") }}"`
 - Templates must remain valid JSON
+- When a user provides a literal placeholder like `{{key}}`, use it verbatim — do **not** expand it into a `get_env()` call or any other Tera expression. The user's `{{key}}` is the value they want.
 
 ## Validation Rules
 
