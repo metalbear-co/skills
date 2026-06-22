@@ -51,23 +51,34 @@ jobs:
           cp /tmp/schema.json skills/mirrord-config/references/schema.json
           cp /tmp/configuration.md skills/mirrord-config/references/configuration.md
 
-          # Bump mirrord-config version
-          python3 -c "
-          import re, pathlib
+          # Bump mirrord-config version. The version on main only advances when
+          # a PR merges, so a naive +1 reproduces the same number every week
+          # while a prior auto-PR is still open, colliding on the branch name.
+          # Collect the versions already claimed by open auto-update branches on
+          # the remote and pick the next free minor above all of them.
+          EXISTING_VERSIONS=$(git ls-remote --heads origin 'refs/heads/auto/update-mirrord-config-refs-v*' \
+            | sed -E 's#.*refs/heads/auto/update-mirrord-config-refs-v##')
+
+          NEW_VERSION=$(EXISTING_VERSIONS="$EXISTING_VERSIONS" python3 -c "
+          import os, re, pathlib
           p = pathlib.Path('skills/mirrord-config/SKILL.md')
           text = p.read_text()
-          def bump(m):
-              major, minor = m.group(1).split('.')
-              return f'version: \"{major}.{int(minor)+1}\"'
-          text = re.sub(r'version: \"([\d.]+)\"', bump, text, count=1)
-          p.write_text(text)
-          "
+          major, minor = (int(x) for x in re.search(r'version: \"([\d.]+)\"', text).group(1).split('.'))
 
-          # Read new version
-          NEW_VERSION=$(python3 -c "
-          import re, pathlib
-          text = pathlib.Path('skills/mirrord-config/SKILL.md').read_text()
-          print(re.search(r'version: \"([\d.]+)\"', text).group(1))
+          taken = set()
+          for v in os.environ.get('EXISTING_VERSIONS', '').split():
+              parts = v.split('.')
+              if len(parts) == 2 and parts[0] == str(major) and parts[1].isdigit():
+                  taken.add(int(parts[1]))
+
+          new_minor = minor + 1
+          while new_minor in taken:
+              new_minor += 1
+
+          new_version = f'{major}.{new_minor}'
+          text = re.sub(r'version: \"([\d.]+)\"', f'version: \"{new_version}\"', text, count=1)
+          p.write_text(text)
+          print(new_version)
           ")
 
           # Build description of what changed
