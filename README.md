@@ -2,7 +2,7 @@
 
 # mirrord Agent Skills
 
-Six [Agent Skills](https://agentskills.io/home) that close the AI agent feedback loop on Kubernetes: real env vars, real DNS, real network, real traffic, real databases, real Kafka. Built by [MetalBear](https://metalbear.com/) to be used with [mirrord](https://metalbear.com/mirrord/).
+Seven [Agent Skills](https://agentskills.io/home) that close the AI agent feedback loop on Kubernetes: real env vars, real DNS, real network, real traffic, real databases, real Kafka, real preview environments. Built by [MetalBear](https://metalbear.com/) to be used with [mirrord](https://metalbear.com/mirrord/).
 
 AI coding agents work from what's in their context window. Your Kubernetes cluster is full of state that isn't. These skills teach your agent how and when to use mirrord so the code it writes against your live infrastructure stops being informed guessing.
 
@@ -22,7 +22,7 @@ npx skills add metalbear-co/skills
 
 Using an agent that doesn't consume Agent Skills yet? The same content can be ported to `.cursorrules`, `agents.md`, Cline rules, and similar. Open an issue with the target you'd like next.
 
-## The six skills
+## The seven skills
 
 | Skill | What it does |
 |-------|--------------|
@@ -32,6 +32,7 @@ Using an agent that doesn't consume Agent Skills yet? The same content can be po
 | [mirrord-ci](./skills/mirrord-ci/) | Wire mirrord into CI pipelines so integration tests hit real cluster services. |
 | [mirrord-db-branching](./skills/mirrord-db-branching/) | Per-developer copy-on-write database branches off your staging DB. |
 | [mirrord-kafka](./skills/mirrord-kafka/) | Kafka queue splitting so each developer consumes a private slice of a real topic. |
+| [mirrord-prev-env](./skills/mirrord-prev-env/) | Preview environments: deploy a built image as an isolated, traffic-filtered pod in a shared cluster — ad hoc or per-PR in CI. |
 
 ## Example prompts
 
@@ -43,6 +44,7 @@ Once installed, your agent activates the right skill based on the prompt:
 - "Set up GitHub Actions to run our integration tests with mirrord against the staging cluster."
 - "Give me an isolated DB branch off the staging Postgres for this feature."
 - "Set up queue splitting on the `orders.created` topic for my local consumer."
+- "Spin up a per-PR preview environment in GitHub Actions so the team can review my change against real traffic."
 
 ## Trusted by
 
