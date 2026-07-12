@@ -12,9 +12,36 @@ AI coding agents work from what's in their context window. Your Kubernetes clust
 
 ```bash
 /plugin marketplace add metalbear-co/skills
+/plugin install mirrord@mirrord-skills
 ```
 
-### Cursor, Codex, Gemini, or any [Agent Skills](https://agentskills.io)-compatible agent
+### Codex
+
+```bash
+codex plugin marketplace add metalbear-co/skills
+```
+
+Then install the `mirrord` plugin from `/plugins`. All seven skills come with it.
+
+### OpenCode
+
+OpenCode loads skills natively, so there's nothing to register — the skills just need to be on disk:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/metalbear-co/skills/main/install.sh | sh
+```
+
+That writes the seven skill folders into `~/.config/opencode/skills/`. Restart OpenCode and they're available. Re-run it any time to update — it replaces the `mirrord-*` folders and leaves your other skills alone.
+
+The same script serves any agent that reads a skills directory:
+
+```bash
+sh install.sh --agent codex     # ~/.agents/skills
+sh install.sh --agent claude    # ~/.claude/skills
+sh install.sh --dest <dir>      # anywhere else
+```
+
+### Cursor, Gemini, or any other [Agent Skills](https://agentskills.io)-compatible agent
 
 ```bash
 npx skills add metalbear-co/skills
