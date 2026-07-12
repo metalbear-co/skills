@@ -1,0 +1,17 @@
+{
+  "name": "mirrord-skills",
+  "interface": {
+    "displayName": "mirrord Agent Skills"
+  },
+  "plugins": [
+    {
+      "name": "mirrord",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/metalbear-co/skills.git",
+        "ref": "main"
+      },
+      "category": "Development"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "mirrord",
+  "version": "1.0.0",
+  "description": "Official mirrord skills for Codex — Kubernetes development workflows including config generation, quickstart, operator setup, CI integration, database branching, Kafka queue splitting, and preview environments.",
+  "skills": "./skills/",
+  "author": {
+    "name": "MetalBear",
+    "email": "support@metalbear.com",
+    "url": "https://metalbear.com"
+  },
+  "homepage": "https://metalbear.com/mirrord/",
+  "repository": "https://github.com/metalbear-co/skills",
+  "license": "MIT",
+  "keywords": ["mirrord", "kubernetes", "k8s", "metalbear", "dev-tools"]
+}

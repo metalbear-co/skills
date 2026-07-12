@@ -21,6 +21,7 @@
         "./skills/mirrord-operator",
         "./skills/mirrord-ci",
         "./skills/mirrord-db-branching",
+        "./skills/mirrord-kafka",
         "./skills/mirrord-prev-env"
       ]
     }
