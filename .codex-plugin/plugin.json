@@ -1,15 +1,46 @@
 {
   "name": "mirrord",
   "version": "1.0.0",
-  "description": "Official mirrord skills for Codex — Kubernetes development workflows including config generation, quickstart, operator setup, CI integration, database branching, Kafka queue splitting, and preview environments.",
+  "description": "Official mirrord skills for Codex, covering real-environment Kubernetes workflows for AI agents and developers.",
   "skills": "./skills/",
   "author": {
     "name": "MetalBear",
     "email": "support@metalbear.com",
     "url": "https://metalbear.com"
   },
-  "homepage": "https://metalbear.com/mirrord/",
+  "homepage": "https://metalbear.com/mirrord/ai/",
   "repository": "https://github.com/metalbear-co/skills",
   "license": "MIT",
-  "keywords": ["mirrord", "kubernetes", "k8s", "metalbear", "dev-tools"]
+  "keywords": [
+    "mirrord",
+    "kubernetes",
+    "k8s",
+    "metalbear",
+    "dev-tools",
+    "ai-agents"
+  ],
+  "interface": {
+    "displayName": "mirrord",
+    "shortDescription": "Guide AI agents through real Kubernetes workflows with mirrord.",
+    "longDescription": "Bundle seven official mirrord skills for quickstart setup, config generation, operator rollout, CI integration, database branching, Kafka queue splitting, and preview environments.",
+    "developerName": "MetalBear",
+    "category": "Development",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://metalbear.com/mirrord/ai/",
+    "privacyPolicyURL": "https://metalbear.com/legal/privacy-policy/",
+    "termsOfServiceURL": "https://metalbear.com/legal/terms/",
+    "defaultPrompt": [
+      "Help me run my first mirrord session against a staging cluster.",
+      "Generate a valid mirrord.json to steal traffic from deployment/api in staging.",
+      "Set up mirrord in GitHub Actions so integration tests run against our shared cluster.",
+      "Create mirrord preview environment instructions for a per-PR workflow.",
+      "Configure mirrord Kafka queue splitting for the orders.created topic."
+    ],
+    "screenshots": [
+      "./assets/mirrord-agent-skills.png"
+    ]
+  }
 }
