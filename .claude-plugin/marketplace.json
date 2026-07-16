@@ -22,7 +22,8 @@
         "./skills/mirrord-ci",
         "./skills/mirrord-db-branching",
         "./skills/mirrord-kafka",
-        "./skills/mirrord-prev-env"
+        "./skills/mirrord-prev-env",
+        "./skills/mirrord-chaos"
       ]
     }
   ]
