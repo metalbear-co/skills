@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "mirrord",
     "shortDescription": "Guide AI agents through real Kubernetes workflows with mirrord.",
-    "longDescription": "Bundle eight official mirrord skills for quickstart setup, config generation, operator rollout, CI integration, database branching, Kafka queue splitting, preview environments, and multi-service mirrord up sessions.",
+    "longDescription": "Bundle nine official mirrord skills for quickstart setup, config generation, operator rollout, CI integration, database branching, Kafka queue splitting, preview environments, multi-service mirrord up sessions, and chaos testing.",
     "developerName": "MetalBear",
     "category": "Development",
     "capabilities": [
@@ -38,7 +38,8 @@
       "Set up mirrord in GitHub Actions so integration tests run against our shared cluster.",
       "Create mirrord preview environment instructions for a per-PR workflow.",
       "Configure mirrord Kafka queue splitting for the orders.created topic.",
-      "Generate a mirrord-up.yaml to debug several microservices together."
+      "Generate a mirrord-up.yaml to debug several microservices together.",
+      "Add 750ms latency to my service's database connections with a mirrord chaos rule."
     ],
     "screenshots": [
       "./assets/mirrord-agent-skills.png"
