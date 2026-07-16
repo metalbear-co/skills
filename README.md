@@ -2,7 +2,7 @@
 
 # mirrord Agent Skills
 
-Eight [Agent Skills](https://agentskills.io/home) that close the AI agent feedback loop on Kubernetes: real env vars, real DNS, real network, real traffic, real databases, real Kafka, real preview environments, real failure conditions. Built by [MetalBear](https://metalbear.com/) to be used with [mirrord](https://metalbear.com/mirrord/).
+Nine [Agent Skills](https://agentskills.io/home) that close the AI agent feedback loop on Kubernetes: real env vars, real DNS, real network, real traffic, real databases, real Kafka, real preview environments, multi-service local sessions, and real failure conditions. Built by [MetalBear](https://metalbear.com/) to be used with [mirrord](https://metalbear.com/mirrord/).
 
 AI coding agents work from what's in their context window. Your Kubernetes cluster is full of state that isn't. These skills teach your agent how and when to use mirrord so the code it writes against your live infrastructure stops being informed guessing.
 
@@ -21,7 +21,7 @@ AI coding agents work from what's in their context window. Your Kubernetes clust
 codex plugin marketplace add metalbear-co/skills
 ```
 
-Then install the `mirrord` plugin from `/plugins`. All eight skills come with it.
+Then install the `mirrord` plugin from `/plugins`. All nine skills come with it.
 
 ### OpenCode
 
@@ -31,7 +31,7 @@ OpenCode loads skills natively, so there's nothing to register — the skills ju
 curl -fsSL https://raw.githubusercontent.com/metalbear-co/skills/main/install.sh | sh
 ```
 
-That writes the eight skill folders into `~/.config/opencode/skills/`. Restart OpenCode and they're available. Re-run it any time to update — it replaces the `mirrord-*` folders and leaves your other skills alone.
+That writes the nine skill folders into `~/.config/opencode/skills/`. Restart OpenCode and they're available. Re-run it any time to update — it replaces the `mirrord-*` folders and leaves your other skills alone.
 
 The same script serves any agent that reads a skills directory:
 
@@ -49,7 +49,7 @@ npx skills add metalbear-co/skills
 
 Using an agent that doesn't consume Agent Skills yet? The same content can be ported to `.cursorrules`, `agents.md`, Cline rules, and similar. Open an issue with the target you'd like next.
 
-## The eight skills
+## The nine skills
 
 | Skill | What it does |
 |-------|--------------|
@@ -60,6 +60,7 @@ Using an agent that doesn't consume Agent Skills yet? The same content can be po
 | [mirrord-db-branching](./skills/mirrord-db-branching/) | Per-developer copy-on-write database branches off your staging DB. |
 | [mirrord-kafka](./skills/mirrord-kafka/) | Kafka queue splitting so each developer consumes a private slice of a real topic. |
 | [mirrord-prev-env](./skills/mirrord-prev-env/) | Preview environments: deploy a built image as an isolated, traffic-filtered pod in a shared cluster — ad hoc or per-PR in CI. |
+| [mirrord-up](./skills/mirrord-up/) | Multiple concurrent local sessions from `mirrord-up.yaml` — compose-style multi-service debugging. |
 | [mirrord-chaos](./skills/mirrord-chaos/) | Chaos testing: inject latency or connection errors into a session's outgoing traffic via per-session rules, interactively or in CI. |
 
 ## Example prompts
@@ -73,6 +74,7 @@ Once installed, your agent activates the right skill based on the prompt:
 - "Give me an isolated DB branch off the staging Postgres for this feature."
 - "Set up queue splitting on the `orders.created` topic for my local consumer."
 - "Spin up a per-PR preview environment in GitHub Actions so the team can review my change against real traffic."
+- "Generate a mirrord-up.yaml so I can debug my auth and dashboard services together."
 - "Make 30% of my service's calls to the payments API time out, so I can test our retry logic."
 
 ## Trusted by
