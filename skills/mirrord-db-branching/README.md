@@ -1,14 +1,15 @@
 # mirrord-db-branching
 
-Configure mirrord for isolated database branches during development.
+Configure mirrord for isolated database branches during development. (Team / Enterprise feature.)
 
 ## What it does
 
 This skill helps AI agents:
-- **Generate** valid `db_branches` configs for mirrord.json
-- **Configure** MySQL, PostgreSQL, MongoDB, and Redis branches
-- **Set up** copy modes (empty, schema, all, filtered)
-- **Configure** IAM authentication for AWS RDS and GCP Cloud SQL
+- **Generate** valid `feature.db_branches` configs for mirrord.json
+- **Configure** MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, and Generic branches
+- **Set up** copy modes (empty, schema, all, filtered) and connection sources (env, Kubernetes Secret, Google Secret Manager, literal, composite, multiple)
+- **Run** schema migrations against a branch (Flyway)
+- **Configure** IAM authentication for AWS RDS, GCP Cloud SQL, and DynamoDB
 - **Manage** database branches via CLI commands
 
 ## Example prompts
@@ -18,7 +19,13 @@ This skill helps AI agents:
 
 "Configure mirrord to use a PostgreSQL branch with schema copy"
 
+"Run my Flyway migrations against a Postgres branch"
+
+"Set up a DynamoDB branch with a full copy of my tables"
+
 "Help me set up a local Redis instance with mirrord"
+
+"Branch a service that has no built-in engine using my own image"
 
 "Configure DB branching with AWS RDS IAM authentication"
 
@@ -27,34 +34,37 @@ This skill helps AI agents:
 
 ## Supported databases
 
-| Database | Type value | Notes |
-|----------|------------|-------|
-| MySQL | `"mysql"` | Requires `operator.mysqlBranching: true` |
-| PostgreSQL | `"pg"` | Supports IAM auth (AWS RDS, GCP Cloud SQL) |
-| MongoDB | `"mongodb"` | Uses collections instead of tables |
-| Redis | `"redis"` | Can run locally or remotely |
+| Database | `type` | Branch location | Notes |
+|----------|--------|-----------------|-------|
+| MySQL | `"mysql"` | Remote | IAM auth, migrations, `dump_args` |
+| MariaDB | `"mariadb"` | Remote | IAM auth, migrations |
+| PostgreSQL | `"pg"` | Remote | IAM auth, migrations, `dump_args`, `connection_settings` |
+| MSSQL | `"mssql"` | Remote | migrations |
+| MongoDB | `"mongodb"` | Remote | collections (no `schema` mode) |
+| Redis | `"redis"` | Remote or local | `name` = DB index |
+| DynamoDB | `"dynamodb"` | Remote (local emulator) | IAM required for full copy |
+| ClickHouse | `"clickhouse"` | Remote | |
+| Google Spanner | `"spanner"` | Remote (emulator) | uses `SPANNER_EMULATOR_HOST` |
+| Generic | `"generic"` | Remote | any service, your own image |
 
 ## Quick example
 
 ```json
 {
-  "db_branches": [
-    {
-      "type": "pg",
-      "version": "16",
-      "connection": {
-        "url": {
-          "type": "env",
-          "variable": "DATABASE_URL"
-        }
-      },
-      "copy": {
-        "mode": "schema"
+  "feature": {
+    "db_branches": [
+      {
+        "type": "pg",
+        "version": "16",
+        "connection": { "url": "DATABASE_URL" },
+        "copy": { "mode": "schema" }
       }
-    }
-  ]
+    ]
+  }
 }
 ```
+
+> `db_branches` is nested under the top-level `feature` object.
 
 ## Branch management
 
@@ -62,20 +72,24 @@ This skill helps AI agents:
 # View branch status
 mirrord db-branches status
 
-# Destroy a branch
+# Destroy a branch / all branches
 mirrord db-branches destroy <branch-name>
-
-# Destroy all branches
 mirrord db-branches destroy --all
+
+# List active branch portforwards (while a session is running)
+mirrord db-branches connections
 ```
 
 ## References
 
 This skill uses local reference files:
-- `references/db-branches-schema.json` — JSON Schema for db_branches configuration
+- `references/db-branches-schema.json` — JSON Schema for `db_branches`, extracted from the authoritative mirrord schema
+- `references/troubleshooting.md` — common issues and solutions
 
 ## Learn more
 
-- [DB Branching Overview](https://metalbear.com/mirrord/docs/using-mirrord/db-branching/)
-- [Advanced Configuration](https://metalbear.com/mirrord/docs/using-mirrord/db-branching-advanced-config/)
-- [Branch Management](https://metalbear.com/mirrord/docs/using-mirrord/db-branch-management/)
+- [DB Branching Overview](https://metalbear.com/mirrord/docs/sharing-the-cluster/db-branching/)
+- [Connection Modes](https://metalbear.com/mirrord/docs/sharing-the-cluster/db-branching/connection/)
+- [IAM Authentication](https://metalbear.com/mirrord/docs/sharing-the-cluster/db-branching/iam-authentication/)
+- [Schema Migrations](https://metalbear.com/mirrord/docs/sharing-the-cluster/db-branching/migrations/)
+- [Branch Management](https://metalbear.com/mirrord/docs/sharing-the-cluster/db-branching/management/)
