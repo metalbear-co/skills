@@ -1,38 +1,64 @@
 # mirrord-operator
 
-Set up mirrord operator for team and enterprise environments.
+Install and operate the mirrord Operator for team and enterprise environments.
 
 ## What it does
 
 This skill helps AI agents:
-- **Install** mirrord operator via Helm
-- **Configure** licensing and Helm values
-- **Set up** RBAC for multi-user access
+- **Install / upgrade** the mirrord operator via Helm (`metalbear/mirrord-operator`)
+- **Authenticate** it — cloud API key (default), license key, or air-gapped PEM / license server
+- **Enable features** — queue splitting, DB branching, preview environments, multi-cluster
+- **Configure** internal registries, TLS, RBAC, OpenShift, and GKE Autopilot
 - **Troubleshoot** operator issues
 
 ## Example prompts
 
 ```
-"Install mirrord operator on my cluster"
+"Install the mirrord operator on my cluster"
 
-"Set up mirrord for my team"
+"Set up mirrord for my team with a cloud API key"
 
-"Configure mirrord operator with our license"
+"Install the operator in an air-gapped cluster"
+
+"Enable Kafka splitting / Postgres DB branching / preview environments"
+
+"Use our internal registry for the operator images"
 
 "Operator pod is not starting, help me debug"
 ```
 
 ## Prerequisites
 
-- Kubernetes cluster with admin access
-- Helm 3.x installed
-- (Optional) mirrord license key for full features
+- Kubernetes cluster with admin access, and Helm 3.x
+- A mirrord for Teams license — register at [app.metalbear.com](https://app.metalbear.com)
 
 ## Quick install
 
-Follow the [official mirrord operator installation guide](https://mirrord.dev/docs/overview/teams/) to add the Helm repository and install the operator. Verify the Helm repo URL against official documentation before use.
+```bash
+helm repo add metalbear https://metalbear-co.github.io/charts
+helm repo update
+curl https://raw.githubusercontent.com/metalbear-co/charts/main/mirrord-operator/values.yaml --output values.yaml
+
+# Create a Secret for the cloud API key (generated in the dashboard → Settings), then reference it:
+#   cloud:
+#     apiKey:
+#       keyRef: mirrord-operator-cloud-api-key
+kubectl create secret generic mirrord-operator-cloud-api-key \
+  --namespace mirrord --from-literal=apiKey=<YOUR_API_KEY>
+
+helm install -f values.yaml mirrord-operator metalbear/mirrord-operator
+mirrord operator status
+```
+
+> **Never** put a cloud API key, license key, or PEM on the command line via `--set` or inline in a committed `values.yaml` — use a Secret ref (`cloud.apiKey.keyRef`, `license.keyRef`, `license.pemRef`) or a Google Secret Manager ref.
+
+## References
+
+- `references/troubleshooting.md` — common operator issues
+- `references/helm-values.md` — the important chart values (auth, feature flags, agent, TLS, registry, platform)
 
 ## Learn more
 
-- [Operator Documentation](https://metalbear.com/mirrord/docs/overview/teams/)
-- [Pricing & Licensing](https://metalbear.com/pricing/)
+- [Operator install docs](https://metalbear.com/mirrord/docs/getting-started/installing-mirrord/operator)
+- [Chart values.yaml](https://raw.githubusercontent.com/metalbear-co/charts/main/mirrord-operator/values.yaml)
+- [Pricing & plan tiers](https://metalbear.com/mirrord/pricing/)
