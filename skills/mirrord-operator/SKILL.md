@@ -80,11 +80,14 @@ The operator needs credentials to obtain its license. Pick **one** path:
 
 **A. Cloud API key (default, recommended).** The operator authenticates to the mirrord cloud with a **cloud API key** and obtains its license over the API. Generate the key in the dashboard under **Settings** at [app.metalbear.com](https://app.metalbear.com) — it's shown **only once**. Provide it one of three ways:
 
-- **Kubernetes Secret (recommended)** — the user creates the Secret; the key never lives in `values.yaml`:
+- **Kubernetes Secret (recommended)** — the user creates the Secret; the key never lives in `values.yaml`. Write the key to a file (its **exact** contents, no trailing newline) and create the Secret with `--from-file`, so the key isn't exposed in the shell's process arguments (`ps`) or history — then delete the file. (Avoid `--from-literal=apiKey=...`, which places the key in argv.)
   ```bash
+  # apikey.txt holds only the key, with no trailing newline
   kubectl create secret generic mirrord-operator-cloud-api-key \
-    --namespace mirrord --from-literal=apiKey=<YOUR_API_KEY>
+    --namespace mirrord --from-file=apiKey=./apikey.txt
+  rm apikey.txt
   ```
+  The Secret's data key must be `apiKey` (what `cloud.apiKey.keyRef` expects). A stray trailing newline in the file becomes part of the key and breaks authentication.
   ```yaml
   cloud:
     apiKey:

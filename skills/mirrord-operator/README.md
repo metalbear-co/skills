@@ -43,8 +43,11 @@ curl https://raw.githubusercontent.com/metalbear-co/charts/main/mirrord-operator
 #   cloud:
 #     apiKey:
 #       keyRef: mirrord-operator-cloud-api-key
+# Write the key to a file (exact contents, no trailing newline) and use --from-file, so the key
+# isn't exposed in argv (ps) or shell history; then delete the file.
 kubectl create secret generic mirrord-operator-cloud-api-key \
-  --namespace mirrord --from-literal=apiKey=<YOUR_API_KEY>
+  --namespace mirrord --from-file=apiKey=./apikey.txt
+rm apikey.txt
 
 helm install -f values.yaml mirrord-operator metalbear/mirrord-operator
 mirrord operator status
