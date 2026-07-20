@@ -6,10 +6,11 @@ Create and manage mirrord **preview environments** — run a modified service as
 
 This skill helps AI agents:
 - **Run** preview environments ad hoc with `mirrord preview start` / `status` / `stop`
-- **Wire** preview environments into CI with the `metalbear-co/mirrord-preview` GitHub Action (e.g. per-PR previews), or by calling the CLI directly
+- **Wire** preview environments into CI with the `metalbear-co/mirrord-preview` GitHub Action (e.g. per-PR previews), or by calling the CLI directly, including least-privilege cluster access via the `mirrord-operator-ci` ClusterRole
+- **Share** a preview via a plain HTTPS link with `mirrord-share-ingress`
 - **Build** the `mirrord.json` that drives a preview (target, traffic filter, TTL, timeout)
-- **Explain** traffic isolation via the environment `key` + `header_filter`, and header propagation across services
-- **Troubleshoot** preview-specific issues (licensing, image pulls, traffic routing, the never-Ready readinessGate, teardown)
+- **Explain** traffic isolation via the environment `key` + `header_filter`, and header propagation across HTTP / gRPC / Kafka / SQS
+- **Troubleshoot** preview-specific issues (licensing, registry/image pulls, `--force` replacement, traffic routing, the never-Ready readinessGate, teardown)
 
 ## Two modes
 
@@ -56,11 +57,11 @@ mirrord preview stop --key pr-123
 - mirrord **CLI 3.189.0+** (the Action installs the latest automatically)
 - **Enterprise** plan
 - Reachable kubeconfig (laptop or CI runner)
-- A **built and pushed** container image for the preview pod
+- A **built and pushed** container image for the preview pod — pushed to the **same registry/repository the target already pulls from** (the preview pulls with the target's credentials)
 
 ## Learn more
 
 - [mirrord Preview Environments docs](https://metalbear.com/mirrord/docs/use-cases/preview-environments)
-- [Preview Environments in CI docs](https://metalbear.com/mirrord/docs/use-cases/preview-environments/preview-environments-in-ci)
+- [Preview Environments in CI docs](https://metalbear.com/mirrord/docs/use-cases/preview-environments-in-ci)
 - [mirrord-preview GitHub Action](https://github.com/metalbear-co/mirrord-preview)
 - [Reference workflow (playground)](https://github.com/metalbear-co/playground/blob/main/.github/workflows/preview-shop-pr.yml)

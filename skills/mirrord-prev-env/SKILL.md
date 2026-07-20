@@ -1,9 +1,9 @@
 ---
 name: mirrord-prev-env
-description: Help users create and manage mirrord preview environments — running a modified service as an isolated pod in a shared Kubernetes cluster, scoped by an environment key and HTTP/queue traffic filtering, so teams can validate and review changes against real traffic without affecting live services. Use when a developer wants to run "mirrord preview" ad hoc, or wire preview environments into CI with the metalbear-co/mirrord-preview GitHub Action (e.g. per-PR previews).
+description: Help users create and manage mirrord preview environments — running a modified service as an isolated pod in a shared Kubernetes cluster, scoped by an environment key and HTTP/queue traffic filtering, so teams can validate and review changes against real traffic without affecting live services. Use when a developer wants to run "mirrord preview" ad hoc, share a preview via a link (mirrord-share-ingress), or wire preview environments into CI with the metalbear-co/mirrord-preview GitHub Action (e.g. per-PR previews, least-privilege cluster access).
 metadata:
   author: MetalBear
-  version: "1.0"
+  version: "2.0"
 ---
 
 # Mirrord Preview Environment Skill
@@ -49,6 +49,7 @@ Preview environments **deploy an image into a shared cluster and route live traf
 - The preview runs your **built image** as a Deployment/pod that mirrors the target's labels and annotations, but an inserted **readinessGate keeps it from ever becoming "Ready"** — so the normal Kubernetes Service never routes background traffic to it.
 - A **Headless Service** routes filtered traffic to the preview without consuming a cluster IP.
 - An **environment key** is the unifying identifier. It scopes HTTP/queue traffic filtering, ties together multiple preview pods, can drive database branches, and lets developers share the same preview. It is auto-generated if you don't supply one.
+- **Reaching a preview** requires sending the filter header (e.g. `baggage: mirrord-session=<key>`). Developers can inject it with the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/incoming-traffic/debug-from-browser) or `curl`. For non-technical stakeholders, `mirrord-share-ingress` mints a plain HTTPS link that injects the header server-side — see [Sharing a preview via a link](#sharing-a-preview-via-a-link).
 - **Local session precedence:** if a developer runs `mirrord exec` against the same deployment with the same environment key, the local session takes over — the preview environment is paused for the duration and resumes automatically when the local session ends.
 
 **Preview environment vs. a normal mirrord session:** `mirrord exec` runs your *local* process as if in the cluster (great for one developer iterating). A *preview environment* deploys a *built image* server-side and routes only filtered traffic to it — shareable and durable, ideal for CI, demos, async review, and AI agents deploying a change for the team to look at before merge.
@@ -62,7 +63,7 @@ Preview environments **deploy an image into a shared cluster and route live traf
 | **Helm flag** | The operator must be deployed with preview environments enabled (see below). |
 | **License** | Preview environments require the **Enterprise** plan. |
 | **Cluster access** | A valid kubeconfig reachable from wherever you run preview (laptop or CI runner). |
-| **A built, pushed image** | Preview deploys an *image*, not local source — build and push it to a registry the cluster can pull from first. |
+| **A built, pushed image** | Preview deploys an *image*, not local source. The preview pod is a copy of the **target's pod spec with the image swapped**, so it pulls with the **same credentials as the target** — there is no separate registry config for previews. Push the preview tag to the **same registry and repository the target already pulls from**, or it fails with `ErrImagePull`. |
 
 Enable the feature in the operator's Helm values:
 
@@ -98,6 +99,20 @@ mirrord preview start -f mirrord.json -i myrepo/myapp:new-tag -k alice-checkout-
 ```
 
 If you omit `-k`, mirrord generates an environment key for you (shown in the output and via `mirrord preview status`).
+
+Example `start` output:
+
+```
+  ✓ mirrord preview start
+    ✓ preview pod is ready
+  info:
+    * key: alice-checkout-fix
+    * namespace: staging
+    * session: preview-session-<target>-<id>
+    * preview URL: https://<slug>.<shareDomain>
+```
+
+The `preview URL` line only appears when [link sharing](#sharing-a-preview-via-a-link) is configured on the cluster.
 
 ### Preview config (`mirrord.json`)
 
@@ -152,7 +167,7 @@ Only requests matching `header_filter` are routed to the preview pod; everything
 curl -H "baggage: mirrord-session=alice-checkout-fix" https://staging.example.com/checkout
 ```
 
-**Propagate the header across services.** For the preview to receive traffic through a call chain, intermediate services must forward the filter header (e.g. `baggage`) on their outgoing requests. Example (Go / Gin):
+**Propagate the header across services.** For the preview to receive traffic through a call chain, intermediate services must forward the filter header (e.g. `baggage`) on their outgoing calls across every transport: **HTTP** (request headers), **gRPC** (outgoing-context metadata), **Kafka** (message headers), and **SQS** (message attributes). First check whether your existing tracing/observability library (e.g. OpenTelemetry) can propagate W3C `baggage`/`tracestate` for you — prefer enabling that over hand-rolled propagation. Example (Go / Gin):
 
 ```go
 baggage := c.GetHeader("baggage")
@@ -168,9 +183,92 @@ ctx := metadata.NewOutgoingContext(c, md)
 
 Using `baggage` (W3C distributed-tracing baggage) means standards-aware libraries propagate it automatically.
 
+## Sharing a preview via a link
+
+By default, reaching a preview requires injecting the `baggage: mirrord-session=<key>` header — fine for developers (via the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/incoming-traffic/debug-from-browser) or `curl`), but a non-starter for a non-technical stakeholder. **`mirrord-share-ingress`** moves that header injection to a server-side component so a plain HTTPS link works with nothing to install on the recipient's side.
+
+- Each shareable preview is reachable at its own host, `<slug>.<shareDomain>`, printed by `mirrord preview start` as the `preview URL`. The `slug` mirrors the preview's key with a random suffix (e.g. `pr-myrepo-a1b2c3`) — recognizable but unguessable. When the TTL expires the host stops resolving and falls through to a "preview not found" page that redirects to your app domain.
+- **Only previews using the default key-derived filter get a share host.** A preview that sets a custom `http_filter` is not served and no share host is minted for it.
+
+**How it works:** `mirrord-share-ingress` runs as its own Deployment + Service, watches Preview Environments, matches each request's host to a live preview, injects `baggage: mirrord-session=<key>`, and forwards to that preview's target Service in-cluster. The operator's filtered steal then routes the request to the preview pod — exactly as the browser extension's header would.
+
+**Setup (platform/admin task).** TLS and the public-facing ingress are owned by your platform team; access control to the link is their responsibility.
+
+1. Configure the operator with the domain share hosts are minted under (must match the chart's `shareDomain`):
+
+   ```yaml
+   operator:
+     previewEnv: true
+     shareIngress:
+       # Minted hosts look like <slug>.<shareDomain>. Enter without "*.".
+       shareDomain: preview.example.com
+   ```
+
+2. Install the `mirrord-share-ingress` chart **before** the first preview (your ingress, DNS, and cert point at its Service). `appDomain` is where visitors land when a link no longer resolves:
+
+   ```bash
+   helm install mirrord-share-ingress metalbear/mirrord-operator-share-ingress \
+     --set shareIngress.shareDomain=preview.example.com \
+     --set shareIngress.appDomain=example.com
+   ```
+
+3. Point a wildcard DNS record `*.preview.example.com` at your ingress, and create an Ingress with a wildcard certificate that **preserves the `Host` header** and routes to the share-ingress Service (NGINX Ingress preserves `Host` by default).
+4. Create the wildcard TLS secret the Ingress references (unless cert-manager issues it):
+
+   ```bash
+   kubectl create secret tls share-ingress-tls --cert=wildcard.crt --key=wildcard.key -n mirrord
+   ```
+
 ## Mode 2 — CI with the mirrord-preview GitHub Action
 
 [`metalbear-co/mirrord-preview`](https://github.com/metalbear-co/mirrord-preview) installs the mirrord CLI, builds a `mirrord.json` from inputs, and runs `mirrord preview start` / `mirrord preview stop` for you. `{{ key }}` in the filter is substituted with the `key` input so each PR gets an isolated session.
+
+### Cluster access for CI (least-privilege)
+
+The CI job needs a kubeconfig to run `mirrord preview`, but **not** cluster-admin. The operator Helm chart ships a **`mirrord-operator-ci` ClusterRole** scoped to exactly what CI needs: creating/deleting preview sessions plus the operator APIs the CLI talks to. Prefer this over a broad kubeconfig or long-lived admin credentials.
+
+Set it up in three steps:
+
+1. **Create an identity and grant it the role** — a `ServiceAccount` (the identity), a `ClusterRoleBinding` attaching `mirrord-operator-ci` to it, and a `kubernetes.io/service-account-token` Secret to mint a token:
+
+   ```yaml
+   apiVersion: v1
+   kind: ServiceAccount
+   metadata: { name: preview-ci, namespace: staging }
+   ---
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: ClusterRoleBinding
+   metadata: { name: preview-ci-mirrord }
+   subjects:
+     - kind: ServiceAccount
+       name: preview-ci
+       namespace: staging
+   roleRef:
+     kind: ClusterRole
+     name: mirrord-operator-ci
+     apiGroup: rbac.authorization.k8s.io
+   ---
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: preview-ci-token
+     namespace: staging
+     annotations: { kubernetes.io/service-account.name: preview-ci }
+   type: kubernetes.io/service-account-token
+   ```
+
+2. **Build a kubeconfig** from the API server address, cluster CA, and the token (`.data.token` from `preview-ci-token`, base64-decoded).
+3. **Store it as a CI secret** (e.g. base64-encode into `KUBECONFIG_DATA`), then decode it and point `KUBECONFIG` at it before any `mirrord preview` step:
+
+   ```yaml
+   - name: Configure cluster access
+     env: { KUBECONFIG_DATA: "${{ secrets.KUBECONFIG_DATA }}" }
+     run: |
+       echo "$KUBECONFIG_DATA" | base64 -d > kubeconfig
+       echo "KUBECONFIG=$PWD/kubeconfig" >> "$GITHUB_ENV"
+   ```
+
+A token with only this ClusterRole can manage preview environments but can't read or modify other cluster resources. Cloud OIDC / Workload Identity Federation is a good alternative to a stored token; either way, keep the RBAC scoped to `mirrord-operator-ci`.
 
 ### Action inputs
 
@@ -244,8 +342,11 @@ mirrord preview start \
   -f mirrord-preview.json \
   -i "ghcr.io/org/my-app:preview-pr-123-abc1234" \
   -k "pr-123" \
+  --force \
   --timeout 600
 ```
+
+> **`--force` is essential in CI.** Without it, `preview start` **refuses** when a session already exists for the same key and target — so a new push to an open PR would fail. `--force` replaces the existing preview pod with the new image (and resets its TTL).
 
 ```bash
 mirrord preview stop -k "pr-${{ github.event.pull_request.number }}" || true
@@ -283,7 +384,7 @@ The typical flow: on PR open/push, CI builds the image(s), pushes to a registry,
 ```
 
 ### CI best practices
-- **Always set a TTL** (`ttl_mins`/`ttl_secs`) so abandoned sessions self-clean on shared clusters; don't rely solely on the close event.
+- **Set a TTL as a leak guard, not the primary cleanup.** The PR-close job is the primary cleanup; `ttl_mins`/`ttl_secs` just catches abandoned sessions. Set it comfortably longer than a typical review; each push (with `--force`) resets it. To make a preview live exactly as long as the PR, set `"ttl_mins": "infinite"` and rely on the close job — but then there's no leak guard if that job fails to run.
 - **Stop on PR close** with `action: stop` (or `mirrord preview stop -k <key> || true`) using the same key.
 - **Key per PR** (e.g. `pr-${{ github.event.pull_request.number }}`, or include the repo name) so concurrent PRs stay isolated.
 - **Use `concurrency`** (group per PR, `cancel-in-progress: true`).
@@ -297,10 +398,12 @@ The typical flow: on PR open/push, CI builds the image(s), pushes to a registry,
 |-------|----------|
 | Preview feature unavailable / operator error | Need Operator 3.142.0+ with `operator.previewEnv: true`, CLI 3.189.0+, and the **Enterprise** plan. See `mirrord-operator` skill. |
 | Traffic never reaches the preview pod | Check the `header_filter` regex matches the header you send, the env key matches, and that intermediate services **propagate the header** on outgoing calls. |
-| Image errors / ImagePullBackOff | The image must be built and pushed to a registry the cluster can pull from; check registry credentials / namespace pull secrets. |
+| `ErrImagePull` / `401 Unauthorized` on the preview pod | The preview pulls with the **target's** credentials (no separate registry config). Push the preview tag to the same registry and repository the target already pulls from. Common trap: a brand-new `ghcr.io` package created by a workflow's `GITHUB_TOKEN` starts **private**. |
+| `preview start` refuses — session already exists | A previous run's session for that key+target is still alive. Pass `--force` to replace it. |
 | Preview pod never becomes "Ready" | Expected — the inserted readinessGate keeps it un-Ready so the Service doesn't route to it. Filtered traffic still reaches it via the headless service. |
 | Preview times out coming up | Increase `feature.preview.creation_timeout_secs` (CLI `--timeout`). |
 | Preview environments linger | Set a TTL; to remove now: `mirrord preview stop --key <key>`. Check live ones with `mirrord preview status`. |
+| No `preview URL` / share link doesn't work | Link sharing needs `mirrord-share-ingress` installed with a `shareDomain` (see [Sharing a preview via a link](#sharing-a-preview-via-a-link)). Also: only previews using the **default key-derived filter** get a share host — a custom `http_filter` mints none. |
 | Want to iterate locally against the same preview | Run `mirrord exec` with the same target + env key; the local session preempts the preview and the preview resumes when you stop. |
 | Need a config option the Action doesn't expose | Use `extra_config` (deep-merged JSON). |
 
@@ -326,7 +429,8 @@ The typical flow: on PR open/push, CI builds the image(s), pushes to a registry,
 ## Learn More
 
 - [mirrord Preview Environments docs](https://metalbear.com/mirrord/docs/use-cases/preview-environments)
-- [Preview Environments in CI docs](https://metalbear.com/mirrord/docs/use-cases/preview-environments/preview-environments-in-ci)
+- [Preview Environments in CI docs](https://metalbear.com/mirrord/docs/use-cases/preview-environments-in-ci)
 - [mirrord-preview GitHub Action](https://github.com/metalbear-co/mirrord-preview)
+- [mirrord Browser Extension (set the header for reviewers)](https://metalbear.com/mirrord/docs/using-mirrord/incoming-traffic/debug-from-browser)
 - [Reference workflow (playground)](https://github.com/metalbear-co/playground/blob/main/.github/workflows/preview-shop-pr.yml)
 - [mirrord config options](https://metalbear.com/mirrord/docs/config/options)
