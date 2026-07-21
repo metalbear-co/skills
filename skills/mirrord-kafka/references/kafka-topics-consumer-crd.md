@@ -1,4 +1,6 @@
-# MirrordKafkaTopicsConsumer CRD Reference
+# MirrordKafkaTopicsConsumer CRD Reference (DEPRECATED)
+
+> **⚠️ Deprecated.** `MirrordKafkaTopicsConsumer` is replaced by **`MirrordSplitConfig`** (`references/mirrord-split-config-crd.md`). Existing resources still work. Use this file only when helping maintain or migrate a legacy setup; generate `MirrordSplitConfig` for anything new. The reference file contains the old→new field mapping.
 
 ## Overview
 Links a Kubernetes workload (Deployment, StatefulSet, or Argo Rollout) to the Kafka topics it consumes, providing the context the mirrord Operator needs to perform queue splitting. Must be created in the **same namespace** as the target workload.

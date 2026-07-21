@@ -1,4 +1,6 @@
-# MirrordKafkaClientConfig CRD Reference
+# MirrordKafkaClientConfig CRD Reference (DEPRECATED)
+
+> **⚠️ Deprecated.** `MirrordKafkaClientConfig` is replaced by **`MirrordPropertyList`** (`references/mirrord-property-list-crd.md`). Existing resources still work, and `MirrordSplitConfig`'s `clientConfig` falls back to a `MirrordKafkaClientConfig` of the same name in the operator namespace. Use this file only when helping maintain or migrate a legacy setup; generate `MirrordPropertyList` for anything new.
 
 ## Overview
 Configures the mirrord Operator's Kafka client for queue splitting. Must be created in the **operator's namespace** (typically `mirrord`).

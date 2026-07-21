@@ -1,0 +1,147 @@
+# MirrordPropertyList CRD Reference (Kafka client connection)
+
+The **current** resource for the operator's Kafka client connection (replaces the deprecated `MirrordKafkaClientConfig`). A `MirrordSplitConfig` queue references it by name via `clientConfig`.
+
+**API Version:** `mirrord.metalbear.co/v1`
+**Kind:** `MirrordPropertyList`
+**Namespace:** the **same namespace as the target workload** and its `MirrordSplitConfig` (this differs from the deprecated `MirrordKafkaClientConfig`, which lived in the operator's namespace).
+
+## spec
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `properties` | list of `{name, value}` or `{name, valueFrom}` | Yes | Kafka client properties, passed straight to the underlying client. A few `mirrord.`-prefixed keys are consumed by the operator (see below). |
+
+Each property is either:
+- `- name: <key>` / `value: "<string>"` — inline value, or
+- `- name: <key>` / `valueFrom: { secretKeyRef: { name: <secret>, key: <key> } }` — read from a Kubernetes Secret.
+
+Full list of Kafka client properties: [librdkafka CONFIGURATION.md](https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md).
+
+## Operator-specific (`mirrord.`-prefixed) keys
+
+Consumed by the operator, not forwarded to the Kafka client:
+
+| Key | Values | Description |
+|-----|--------|-------------|
+| `mirrord.client_implementation` | `librdkafka` (default), `java` | Kafka client backend. Use `java` for **Kafka Streams** consumers (`appConfig.appId`). |
+| `mirrord.auth.kind` | `MSK_IAM` | Extra authentication mechanism (only supported value). See [MSK IAM](#aws-msk-iam). |
+| `mirrord.auth.aws_region` | e.g. `eu-south-1` | AWS region; required when `mirrord.auth.kind` is `MSK_IAM`. |
+
+> **Do not set `group.id`.** The consumer group used by the operator's own client is managed by mirrord.
+
+## Fallback to the legacy resource
+
+If no `MirrordPropertyList` with the referenced `clientConfig` name exists in the target's namespace, the operator falls back to a legacy `MirrordKafkaClientConfig` of the same name in the operator's namespace. This keeps older setups working while you migrate.
+
+## Common properties
+
+| Property | Typical value | Notes |
+|----------|---------------|-------|
+| `bootstrap.servers` | `kafka.default.svc.cluster.local:9092` | Required. |
+| `security.protocol` | `PLAINTEXT`, `SSL`, `SASL_SSL`, `SASL_PLAINTEXT` | Depends on cluster auth. |
+| `sasl.mechanism` | `PLAIN`, `SCRAM-SHA-256`, `SCRAM-SHA-512`, `OAUTHBEARER` | For SASL. |
+| `sasl.username` / `sasl.password` | credentials | For SASL PLAIN/SCRAM — use `valueFrom.secretKeyRef`. |
+| `ssl.certificate.pem` / `ssl.key.pem` / `ssl.ca.pem` | PEM contents | For SSL/mTLS. |
+| `ssl.key.password` | string | If the private key is password-protected. |
+
+## Examples
+
+### Plaintext (dev)
+
+```yaml
+apiVersion: mirrord.metalbear.co/v1
+kind: MirrordPropertyList
+metadata:
+  name: kafka-connection
+  namespace: meme
+spec:
+  properties:
+    - name: bootstrap.servers
+      value: kafka.default.svc.cluster.local:9092
+    - name: security.protocol
+      value: PLAINTEXT
+```
+
+### AWS MSK IAM
+
+```yaml
+spec:
+  properties:
+    - name: bootstrap.servers
+      value: b-1.mycluster.kafka.eu-south-1.amazonaws.com:9098
+    - name: mirrord.auth.kind
+      value: MSK_IAM
+    - name: mirrord.auth.aws_region
+      value: eu-south-1
+```
+
+When `mirrord.auth.kind: MSK_IAM`, the operator automatically adds `sasl.mechanism=OAUTHBEARER` and `security.protocol=SASL_SSL`. Tokens are produced via the default AWS credential provider chain — the easiest path is IAM role assumption, annotating the operator's service account with the role ARN via `sa.roleArn` in the operator Helm chart.
+
+### SSL/mTLS via Kubernetes Secret (recommended for credentials)
+
+Never inline PEM key material or passwords. Store them in a Secret and reference with `valueFrom.secretKeyRef`:
+
+```yaml
+spec:
+  properties:
+    - name: bootstrap.servers
+      value: kafka.default.svc.cluster.local:9093
+    - name: security.protocol
+      value: SSL
+    - name: ssl.certificate.pem
+      valueFrom:
+        secretKeyRef:
+          name: mirrord-kafka-ssl
+          key: ssl.certificate.pem
+    - name: ssl.key.pem
+      valueFrom:
+        secretKeyRef:
+          name: mirrord-kafka-ssl
+          key: ssl.key.pem
+    - name: ssl.ca.pem
+      valueFrom:
+        secretKeyRef:
+          name: mirrord-kafka-ssl
+          key: ssl.ca.pem
+```
+
+> By default the operator has read access only to secrets in the operator's namespace, even though the `MirrordPropertyList` itself lives in the target's namespace. Confirm the referenced Secret is reachable by the operator; if not, the admin must grant read access.
+
+### Kafka Streams (Java client)
+
+```yaml
+spec:
+  properties:
+    - name: bootstrap.servers
+      value: kafka.default.svc.cluster.local:9092
+    - name: mirrord.client_implementation
+      value: java
+```
+
+Kafka Streams also requires the operator's Kafka sidecar (`operator.kafkaSplittingSidecar.enabled: true` in the Helm chart).
+
+## JKS credentials → PEM
+
+The client only supports PEM. Convert a Java KeyStore first:
+
+```sh
+keytool -importkeystore -srckeystore keystore.jks -srcstoretype JKS \
+  -destkeystore keystore.p12 -deststoretype PKCS12
+openssl pkcs12 -in keystore.p12 -clcerts -nokeys -out client-cert.pem
+openssl pkcs12 -in keystore.p12 -nocerts -nodes -out client-key.pem
+
+keytool -importkeystore -srckeystore truststore.jks -srcstoretype JKS \
+  -destkeystore truststore.p12 -deststoretype PKCS12
+openssl pkcs12 -in truststore.p12 -nokeys -out ca-cert.pem
+```
+
+Then use `ssl.certificate.pem`, `ssl.key.pem`, `ssl.ca.pem` (via a Secret).
+
+## Mapping from the deprecated resource
+
+`MirrordKafkaClientConfig` properties map one-to-one onto `MirrordPropertyList` properties. Differences:
+- **Namespace:** `MirrordPropertyList` lives in the **target's** namespace; `MirrordKafkaClientConfig` lived in the **operator's** namespace.
+- **MSK IAM:** the old `authenticationExtra: { kind: MSK_IAM, awsRegion: ... }` becomes the `mirrord.auth.kind` / `mirrord.auth.aws_region` properties.
+- **Secrets:** the old `loadFromSecret` becomes per-property `valueFrom.secretKeyRef`.
+- The old `parent` inheritance has no direct equivalent — repeat shared properties, or use `spec.clientConfigs.kafka` on the `MirrordSplitConfig` to share one `MirrordPropertyList` across queues.
