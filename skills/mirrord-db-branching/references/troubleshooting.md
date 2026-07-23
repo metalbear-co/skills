@@ -1,45 +1,46 @@
 # Common Issues
 
-> Source: https://github.com/metalbear-co/docs/tree/main/docs/troubleshooting
+> Source: https://metalbear.com/mirrord/docs/sharing-the-cluster/db-branching/
+
+> **Config nesting:** `db_branches` must live under the top-level `feature` object
+> (`{"feature": {"db_branches": [ ... ]}}`). Placed at the top level it is ignored.
 
 ## Branch creation times out or is very slow
 
-This is often caused by using `"mode": "all"` on a large database. The `all` mode copies the entire database including all data, which can take a long time for databases with significant data.
+Often caused by using `"mode": "all"` on a large database. The `all` mode copies the entire database including all data, which can take a long time.
 
 **Solution:** Use `"mode": "schema"` or `"mode": "empty"` instead:
 
 ```json
-{
-  "copy": {
-    "mode": "schema"
-  }
-}
+{ "copy": { "mode": "schema" } }
 ```
 
-If you need specific data, use filtered copying:
+If you need specific data, use filtered copying (SQL engines):
 
 ```json
 {
   "copy": {
     "mode": "schema",
-    "tables": {
-      "users": {"filter": "id < 100"}
-    }
+    "tables": { "users": { "filter": "id < 100" } }
   }
 }
 ```
+
+Note: filters are ignored when `"mode": "all"` is set — combine filters with `"empty"` or `"schema"` instead.
+
+Unrecoverable pod failures (e.g. `ImagePullBackOff`, `OOMKilled`) fail the branch immediately with the underlying error rather than waiting for `creation_timeout_secs`.
 
 ## Connection fails with SSL/TLS errors
 
 Branch databases disable SSL by default. If your application client is configured to require SSL, the connection will fail.
 
-**Solution:** Configure your application to allow non-SSL connections to the branch database, or check if the client is forcing SSL when it shouldn't.
+**Solution:** Configure your application to allow non-SSL connections to the branch, or stop the client from forcing SSL. (GCP Cloud SQL IAM is the exception — see below.)
 
 ## GCP Cloud SQL connection fails
 
-GCP Cloud SQL with IAM authentication requires TLS. If your connection URL doesn't include `sslmode=require`, the connection will fail.
+GCP Cloud SQL with IAM authentication requires TLS. If the connection URL doesn't include `sslmode=require`, the connection will fail.
 
-**Solution:** Ensure your connection URL includes the SSL mode parameter:
+**Solution:** Ensure the URL includes the SSL mode parameter:
 
 ```
 postgresql://user@host:5432/dbname?sslmode=require
@@ -49,103 +50,111 @@ postgresql://user@host:5432/dbname?sslmode=require
 
 If you expect a branch to persist and be reused but a new one is created each time, check:
 
-1. The `id` field must be set and identical between sessions
-2. The branch TTL (`ttl_secs`) hasn't expired - max is 900 seconds (15 minutes)
-
-**Solution:** Set an explicit `id` and ensure TTL is sufficient:
+1. The `id` field must be set and identical between sessions.
+2. The branch TTL hasn't expired. TTL is counted from when no session is using the branch. Default is 5 minutes and it **caps at 15 minutes**. Set `ttl_secs` or `ttl_mins` (mutually exclusive).
 
 ```json
 {
-  "db_branches": [
-    {
-      "id": "my-stable-branch",
-      "ttl_secs": 900,
-      "type": "pg",
-      ...
-    }
-  ]
-}
-```
-
-## Application connects to wrong database
-
-If your application isn't connecting to the branch database, the environment variable name in your config likely doesn't match what your application actually uses.
-
-**Solution:** Verify the exact environment variable your application reads for the database connection:
-
-```bash
-# Check what env var your app uses
-mirrord exec --target pod/<pod-name> -- env | grep -i database
-mirrord exec --target pod/<pod-name> -- env | grep -i postgres
-mirrord exec --target pod/<pod-name> -- env | grep -i mysql
-```
-
-Then update your config to match:
-
-```json
-{
-  "connection": {
-    "url": {
-      "type": "env",
-      "variable": "DATABASE_URL"
-    }
+  "feature": {
+    "db_branches": [
+      { "id": "my-stable-branch", "ttl_mins": 15, "type": "pg", "connection": { "url": "DATABASE_URL" } }
+    ]
   }
 }
 ```
 
+Note: `id` is ignored for local Redis instances.
+
+## Application connects to wrong database
+
+If your application isn't connecting to the branch, the connection variable(s) in your config likely don't match what the app actually reads.
+
+**Solution:** Verify the exact environment variable(s):
+
+```bash
+mirrord exec --target pod/<pod-name> -- env | grep -iE 'database|postgres|mysql|redis|mongo'
+```
+
+Then match your config to it:
+
+```json
+{ "connection": { "url": "DATABASE_URL" } }
+```
+
+For apps that split the connection across variables, use params mode; for a value packed into one variable, use `value_pattern`. See the Connection Modes doc.
+
 ## AWS RDS IAM authentication fails
 
-When using AWS RDS with IAM authentication, mirrord needs access to AWS credentials from the target pod's environment.
+mirrord reads AWS credentials from the **target pod's** environment (not your local shell).
 
-**Solution:** Ensure the target pod has the required AWS environment variables:
+**Solution:** Ensure the target pod exposes:
 - `AWS_REGION` or `AWS_DEFAULT_REGION`
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_SESSION_TOKEN` (if using temporary credentials)
 
-If using IRSA (IAM Roles for Service Accounts), the pod must have the appropriate annotations and the service account must be configured correctly.
+With IRSA (IAM Roles for Service Accounts), the pod's service account must be configured correctly. For non-standard variable names, set custom sources under `iam_auth`.
+
+## DynamoDB full copy fails
+
+DynamoDB has no password-based auth. `"copy": { "mode": "all" }` **requires** `iam_auth`.
+
+**Solution:**
+
+```json
+{ "type": "dynamodb", "iam_auth": { "type": "aws_rds" }, "copy": { "mode": "all" } }
+```
+
+Also note: DynamoDB `filter` strings can't use `ExpressionAttributeValues`/`Names` placeholders; only self-contained expressions work. LSIs are not copied; branch tables use PayPerRequest billing.
 
 ## MongoDB branch filter syntax errors
 
-MongoDB uses JSON-based filter syntax, not SQL. Filters must be valid MongoDB query documents as escaped JSON strings.
-
-**Solution:** Use proper MongoDB query syntax:
+MongoDB uses JSON-based filter syntax, not SQL. Filters must be valid MongoDB query documents as escaped JSON strings, and MongoDB supports only `empty` / `all` (no `schema`).
 
 ```json
 {
   "copy": {
     "mode": "all",
     "collections": {
-      "users": {"filter": "{\"role\": \"admin\"}"},
-      "orders": {"filter": "{\"status\": {\"$in\": [\"pending\", \"processing\"]}}"}
+      "users": { "filter": "{\"role\": \"admin\"}" },
+      "orders": { "filter": "{\"status\": {\"$in\": [\"pending\", \"processing\"]}}" }
     }
   }
 }
 ```
 
+## Schema migrations rejected
+
+`migrations` requires the branch `name` to be set and is only available for MySQL, MariaDB, PostgreSQL, and MSSQL. A migration that conflicts with one already applied to the branch fails your session only; the branch stays usable.
+
+## Generic branch never becomes ready
+
+A plain TCP readiness probe can pass before the service is actually usable (e.g. before first-boot setup completes).
+
+**Solution:** Use an `http_get` or `exec` probe that proves usability:
+
+```json
+{ "readiness": { "type": "http_get", "path": "/health" } }
+```
+
+Heavy JVM images (Elasticsearch, Cassandra, Couchbase) can OOM at the 512Mi branch-pod default; an admin must raise `dbPod.resources` in `genericBranchConfig`. If an image isn't in the admin's `allowedImages` glob list, the branch fails immediately naming the image.
+
 ## Version compatibility issues
 
-DB branching requires specific minimum versions:
+Each engine has minimum operator, CLI, and Helm chart versions, plus a per-engine Helm value that must be enabled (e.g. `operator.mysqlBranching: true`, `operator.pgBranching: true`, `operator.dynamodbBranching: true`, `operator.genericBranching: true`). See the Version Requirements table in `SKILL.md`.
 
-- **MySQL**: Operator 3.129.0+, CLI 3.160.0+, Helm chart 1.37.0+
-- **PostgreSQL**: Operator 3.131.0+, CLI 3.175.0+, Helm chart 1.40.2+
-
-**Solution:** Check your versions:
+**Check your versions:**
 
 ```bash
 mirrord --version
 kubectl get deployment -n mirrord mirrord-operator -o jsonpath='{.spec.template.spec.containers[0].image}'
 ```
 
-Also ensure the appropriate feature flag is enabled in the Helm chart:
-- MySQL: `operator.mysqlBranching: true`
-- PostgreSQL: `operator.pgBranching: true`
-
 ## Local Redis container fails to start
 
-When using local Redis (`"location": "local"`), the container runtime must be available and properly configured.
+When using local Redis (`"location": "local"`), the container runtime must be available.
 
-**Solution:** Verify Docker or your container runtime is running:
+**Solution:** Verify Docker (or your runtime) is running:
 
 ```bash
 docker info
@@ -155,17 +164,14 @@ Check the local Redis configuration:
 
 ```json
 {
-  "db_branches": [
-    {
-      "type": "redis",
-      "location": "local",
-      "local": {
-        "runtime": "container",
-        "container_runtime": "docker",
-        "port": 6379,
-        "version": "7-alpine"
+  "feature": {
+    "db_branches": [
+      {
+        "type": "redis",
+        "location": "local",
+        "local": { "runtime": "container", "container_runtime": "docker", "port": 6379 }
       }
-    }
-  ]
+    ]
+  }
 }
 ```

@@ -1,205 +1,153 @@
 # Common Issues
 
-> Source: https://github.com/metalbear-co/docs/tree/main/docs/troubleshooting
+> Sources:
+> - https://metalbear.com/mirrord/docs/getting-started/installing-mirrord/operator
+> - https://metalbear.com/mirrord/docs/troubleshooting
 
 ## "Operator not found" when running mirrord
 
 The mirrord client cannot find or connect to the operator in the cluster.
 
-**Solution:** Verify the operator pod is running:
+**Solution:** Confirm the operator is up and reachable:
 
 ```bash
-kubectl get pods -n mirrord
+mirrord operator status                        # preferred — checks the client can reach the operator
 kubectl get deployment -n mirrord mirrord-operator
+kubectl get pods -n mirrord
 ```
 
-If the pod isn't running, check the deployment status and events:
+If the pod isn't running, inspect it:
 
 ```bash
 kubectl describe deployment -n mirrord mirrord-operator
-kubectl logs -n mirrord -l app=mirrord-operator
+kubectl logs -n mirrord deployment/mirrord-operator
 ```
 
-## License key invalid or expired
+## Licensing / authentication errors
 
-The operator rejects connections due to licensing issues.
+The operator can't obtain or validate a license.
 
-**Solution:**
+**How the operator authenticates (know which path you're on):**
+- **Cloud API key (default):** the operator exchanges a cloud API key for a license over the API. Provide it via `cloud.apiKey.keyRef` (Secret), `cloud.apiKey.gsmRef` (Google Secret Manager), or `cloud.apiKey.key` (inline dev/test). A revoked/rotated key or no cloud connectivity causes failures — regenerate in the dashboard (Settings, app.metalbear.com).
+- **License key (deprecated for cloud):** `license.key` / `license.keyRef` (Secret data key `OPERATOR_LICENSE_KEY`). Still required as the shared secret when using a self-hosted license server.
+- **Air-gapped:** offline PEM (`license.file.secret.data.license.pem` or `license.pemRef`) or a `license.licenseServer` URL.
 
-1. Verify the license secret exists and is populated:
-```bash
-kubectl get secret -n mirrord mirrord-license
-```
-
-2. Check operator logs for license-related errors:
-```bash
-kubectl logs -n mirrord -l app=mirrord-operator | grep -i license
-```
-
-3. If the license expired, contact MetalBear for renewal. Then update the license secret using `--from-file` (save the new key to a temporary file first):
-```bash
-# Save your new license key to a temporary file, then:
-kubectl create secret generic mirrord-license \
-  --from-file=key=/path/to/new-license-key-file \
-  -n mirrord --dry-run=client -o yaml | kubectl apply -f -
-# Delete the temporary file after updating the secret
-# Then upgrade the Helm release using the chart name and release name from the official operator docs.
-# Use -f values.yaml for license keyRef — do not pass license material via --set.
-helm upgrade <RELEASE_NAME> <CHART_FROM_OFFICIAL_DOCS> --namespace mirrord -f values.yaml
-```
-
-## "Permission denied" when using mirrord with operator
-
-Users cannot create mirrord sessions due to RBAC restrictions.
-
-**Solution:** The user needs appropriate permissions on mirrord CRDs. Create a ClusterRole and binding:
-
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: mirrord-user
-rules:
-- apiGroups: ["mirrord.metalbear.co"]
-  resources: ["targets", "sessions"]
-  verbs: ["get", "list", "create", "delete"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: mirrord-user-binding
-subjects:
-- kind: User
-  name: <username>
-  apiGroup: rbac.authorization.k8s.io
-roleRef:
-  kind: ClusterRole
-  name: mirrord-user
-  apiGroup: rbac.authorization.k8s.io
-```
-
-## "Namespace not allowed" error
-
-The operator rejects sessions for targets in certain namespaces.
-
-**Solution:** Check the `roleNamespaces` setting in your Helm values. An empty list means all namespaces are allowed:
-
-```yaml
-# values.yaml
-roleNamespaces: []  # Allow all namespaces
-```
-
-Or specify allowed namespaces explicitly:
-
-```yaml
-roleNamespaces:
-  - staging
-  - development
-```
-
-Then upgrade (release/chart names per official operator documentation):
+**Checks:**
 
 ```bash
-helm upgrade <RELEASE_NAME> <CHART_FROM_OFFICIAL_DOCS> \
-  --namespace mirrord -f values.yaml
+# If using a Secret ref, confirm it exists and is populated
+kubectl get secret -n mirrord <your-secret-name>
+
+# Look for auth/license errors in the logs
+kubectl logs -n mirrord deployment/mirrord-operator | grep -iE 'licen|api key|cloud|auth'
 ```
+
+To rotate a **cloud API key**, update it in the dashboard, recreate the Secret (have the user run it — never paste the key into the agent), and `helm upgrade`. Never pass key material via `--set`.
+
+## "Permission denied" / users can't create sessions (RBAC)
+
+Users lack permission on mirrord's CRDs.
+
+**Solution:** Use the **roles the chart creates** — don't hand-write a role for mirrord's CRDs (they span several API groups: `operator.metalbear.co`, `mirrord.metalbear.co`, `queues.mirrord.metalbear.co`, `preview.mirrord.metalbear.co`, and change over time).
+
+1. For each namespace where developers run mirrord, add it to `roleNamespaces` so the chart creates a namespaced role there:
+   ```yaml
+   roleNamespaces:
+     - staging
+     - development
+   ```
+2. `helm upgrade`, then bind users/groups/service accounts to the chart's roles with your own RoleBinding/ClusterRoleBinding. Available cluster roles: `mirrord-operator-user-basic`, `mirrord-operator-user`, and `mirrord-operator-ci` (scoped for CI / preview environments). Example:
+   ```yaml
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: ClusterRoleBinding
+   metadata:
+     name: alice-mirrord
+   subjects:
+     - kind: User
+       name: alice
+       apiGroup: rbac.authorization.k8s.io
+   roleRef:
+     kind: ClusterRole
+     name: mirrord-operator-user
+     apiGroup: rbac.authorization.k8s.io
+   ```
+
+`roleNamespaces: []` (empty) creates no namespaced roles.
 
 ## Operator pod keeps crashing or restarting
 
-The operator pod fails to start or crashes repeatedly.
-
-**Solution:**
-
-1. Check pod logs:
 ```bash
-kubectl logs -n mirrord -l app=mirrord-operator --previous
+kubectl logs -n mirrord deployment/mirrord-operator --previous
+kubectl get events -n mirrord --sort-by='.lastTimestamp'
 ```
 
-2. Check resource limits - the default may be too low for large clusters:
+Raise resources if the cluster is large (defaults suit ~200 concurrent sessions):
+
 ```yaml
 operator:
-  resources:
-    limits:
-      cpu: 200m
-      memory: 200Mi  # Increase if needed for many concurrent sessions
-```
-
-3. Check events:
-```bash
-kubectl get events -n mirrord --sort-by='.lastTimestamp'
+  requests: { cpu: 100m, memory: 100Mi }
+  limits:   { cpu: 200m, memory: 200Mi }   # increase for more sessions
 ```
 
 ## Port 443 conflict or unavailable
 
-The operator's webhook server cannot bind to port 443.
-
-**Solution:** Configure the operator to use an alternative port:
+The operator can't bind port 443.
 
 ```yaml
 operator:
-  port: 8443  # Or 3000
+  port: 8443   # or 3000
 ```
 
-Then upgrade the Helm release.
-
-## Webhook certificate errors
-
-TLS certificate issues prevent the API server from calling the operator's webhooks.
-
-**Solution:**
-
-1. Check certificate secret exists:
-```bash
-kubectl get secret -n mirrord mirrord-operator-webhook-cert
-```
-
-2. Restart the operator to regenerate certificates:
-```bash
-kubectl rollout restart deployment -n mirrord mirrord-operator
-```
-
-3. If issues persist, reinstall using the install steps from the official operator documentation (chart reference and release name from docs — not hard-coded here):
-```bash
-helm uninstall <RELEASE_NAME> --namespace mirrord
-# Then helm install per official docs
-```
+Ensure nodes can reach the chosen port, then `helm upgrade`.
 
 ## `mirrord operator status` fails with `503 Service Unavailable` on GKE
 
-If private networking is enabled, firewall rules may block the operator's API service.
+With private networking, firewall rules may block the operator's API service.
 
-**Solution:** Add a firewall rule that allows your cluster's master nodes to access TCP port 443 (or your configured operator port) in your cluster's pods.
+**Solution:** Add a firewall rule allowing your cluster's master nodes to reach the operator port (default 443) on the cluster's pods.
 
-## Sessions fail silently with service mesh
+## TLS / API-service certificate errors
 
-Service meshes (Istio, Linkerd) may interfere with operator-agent communication.
+The API server can't validate the operator's aggregated API service.
 
 **Solution:**
+- If you use a verified certificate, set `tls.apiService.insecureSkipTLSVerify: false`.
+- To provision the cert out-of-band (ExternalSecret, cert-manager), set `tls.useExistingSecret: true` (then `tls.data`/`tls.certManager` are ignored), or enable `tls.certManager.enabled: true`.
+- Restart to regenerate a self-signed cert if neither cert-manager nor `tls.data` is set:
+  ```bash
+  kubectl rollout restart deployment -n mirrord mirrord-operator
+  ```
 
-1. Exclude the mirrord namespace from the mesh, or
-2. Set a static agent port and add exclusion annotations:
+## Sessions fail silently with a service mesh
+
+Meshes (Istio, Linkerd) can interfere with operator↔agent traffic.
+
+**Solution:** Exclude the mirrord namespace from the mesh, or pin a static agent port and exclude it:
 
 ```yaml
-# In Helm values
 agent:
   port: 50000
 ```
 
-For Istio, add to target pod annotations:
+Istio target-pod annotation:
+
 ```
 traffic.sidecar.istio.io/excludeInboundPorts: '50000'
 ```
 
-## Upgrading operator breaks existing sessions
+## Feature enabled in config but rejected by the operator
 
-Running sessions may fail after operator upgrade.
+A feature (queue splitting, DB branching, preview environments) is used client-side but its Helm flag isn't enabled, or the operator/CLI version is too old.
 
-**Solution:** Wait for existing sessions to complete before upgrading, or coordinate with users:
+**Solution:** Enable the matching `operator.*` flag (e.g. `operator.kafkaSplitting`, `operator.pgBranching`, `operator.previewEnv`) and `helm upgrade`. Check each feature's minimum operator/CLI/chart versions in the corresponding feature skill (`mirrord-kafka`, `mirrord-db-branching`, `mirrord-prev-env`). Note **generic DB branching** (`operator.genericBranching`) lets branch creators run arbitrary images — gate it and restrict `genericBranchConfig.dbPod.allowedImages`.
+
+## Upgrading the operator breaks in-flight sessions
+
+Running sessions can fail during an upgrade.
+
+**Solution:** Upgrade when the cluster is quiet. Check activity with `mirrord operator status`, then:
 
 ```bash
-# Check active sessions
-kubectl get sessions.mirrord.metalbear.co -A
-
-# Upgrade when no sessions are active (chart/release per official docs)
-helm upgrade <RELEASE_NAME> <CHART_FROM_OFFICIAL_DOCS> --namespace mirrord -f values.yaml
+helm repo update
+helm upgrade --install -f values.yaml mirrord-operator metalbear/mirrord-operator
 ```

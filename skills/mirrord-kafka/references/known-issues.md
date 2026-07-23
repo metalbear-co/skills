@@ -2,15 +2,20 @@
 
 These are real issues encountered by customers and tracked internally.
 
-## MUST-KNOW: groupIdSources is required (INT-366)
-**Status:** Open bug  
-The CRD schema marks `groupIdSources` as optional, but the operator returns HTTP 500 when it's omitted.  
-**Action:** Always include `groupIdSources` in every topic entry. There is no valid use case for omitting it.
+> **CRD note:** the current resources are `MirrordSplitConfig` + `MirrordPropertyList`. `MirrordKafkaTopicsConsumer` + `MirrordKafkaClientConfig` are deprecated (still supported). Issues below apply to both models unless marked *(legacy)*.
+
+## Consumer identity is required per queue
+**New model:** each `MirrordSplitConfig` queue must set **exactly one** of `appConfig.groupId` (standard consumers) or `appConfig.appId` (Kafka Streams). Omitting both is a config error.
+
+*(legacy)* **groupIdSources is required (INT-366):** in `MirrordKafkaTopicsConsumer`, the schema marks `groupIdSources` optional but the operator returns HTTP 500 when it's omitted. Always include it.
+
+## Content/body filtering IS supported via jq_filter
+Earlier the operator could only filter Kafka messages by header (`message_filter`). This is no longer a limitation: **`jq_filter`** runs a jq program over a JSON representation of the record (`topic`, `partition`, `offset`, `timestamp`, `key`, `payload`, `headers`) and matches when it outputs `true` — so you can route by fields inside the message body. Requires operator **3.183.0+**, CLI **3.232.0+**, and the default **librdkafka** client (not the Java/Streams client). If both `message_filter` and `jq_filter` are set, both must match.
 
 ## min.insync.replicas not copied to ephemeral topics (INT-384)
 **Status:** Open bug  
 When the source topic has `replication.factor=1` and `min.insync.replicas=1`, the operator copies the replication factor but not `min.insync.replicas` to ephemeral topics. Those topics inherit the broker default (often `2`), so with `acks=all` the producer waits for 2 replicas when only 1 exists → timeout.  
-**Workaround:** Add `acks: "1"` to `MirrordKafkaClientConfig` properties if using single-replica topics.
+**Workaround:** Add `acks: "1"` to the `MirrordPropertyList` (or legacy `MirrordKafkaClientConfig`) properties if using single-replica topics.
 
 ## Java KeyStore (JKS) not directly supported (INT-165)
 **Status:** Open — Low priority  
@@ -36,14 +41,14 @@ Kafka splitting only works when topic name and group ID are exposed as environme
 **Workaround:** Expose the topic name and group ID as regular env vars in the pod template for the operator to read. The actual application can still use Vault for other config.
 
 ## Operational friction with many Kafka clusters (SOL-144)
-**Status:** Open — Urgent  
-Customers with many namespaces and distinct Kafka clusters find `MirrordKafkaClientConfig` cumbersome because it's scoped to the operator namespace. Each distinct Kafka cluster needs its own config resource.  
-**Guidance:** Use the `parent` inheritance feature to share common properties and create child configs only for cluster-specific overrides (like different `bootstrap.servers`).
+**Status:** Improved by the new model  
+The deprecated `MirrordKafkaClientConfig` was scoped to the operator namespace, so many clusters/namespaces got cumbersome. The current `MirrordPropertyList` lives in the **target's namespace** alongside the `MirrordSplitConfig`.  
+**Guidance:** Share one `MirrordPropertyList` across a `MirrordSplitConfig`'s queues via `spec.clientConfigs.kafka`. *(legacy)* `MirrordKafkaClientConfig` supported `parent` inheritance for shared properties; `MirrordPropertyList` has no `parent` — repeat shared properties or share by name.
 
-## InconsistentGroupProtocol with Kafka Streams (INT-226)
-**Status:** Resolved  
-The operator's librdkafka consumer was incompatible with Kafka Streams' custom partition assignment. Fixed by integrating a JVM-based Kafka proxy.  
-**Note:** If a customer uses Kafka Streams, they need operator version ≥ 3.114.0 and the JVM proxy integration enabled in the Helm chart.
+## Kafka Streams needs the Java client (INT-226)
+**Status:** Supported  
+The operator's default librdkafka consumer is incompatible with Kafka Streams' custom partition assignment; a JVM-based Kafka proxy handles it.  
+**How to enable:** set `mirrord.client_implementation: java` on the `MirrordPropertyList`, use `appConfig.appId` (not `groupId`) on the queue, and enable `operator.kafkaSplittingSidecar.enabled: true` in the Helm chart. `jq_filter` is **not** available with the Java client.
 
 ## Ephemeral topic cleanup errors (INT-392)
 **Status:** Open — Urgent  
@@ -67,7 +72,8 @@ All three template variables (`{{RANDOM}}`, `{{FALLBACK}}`, `{{ORIGINAL_TOPIC}}`
 
 | Symptom | Likely cause | Reference |
 |---------|-------------|-----------|
-| Operator returns 500 when starting session | `groupIdSources` missing from `MirrordKafkaTopicsConsumer` | INT-366 |
+| Operator returns 500 when starting session | *(legacy)* `groupIdSources` missing from `MirrordKafkaTopicsConsumer`; *(new)* neither `appConfig.groupId` nor `appConfig.appId` set on the queue | INT-366 |
+| Body/payload filter needed but "only headers supported" | Outdated — use `jq_filter` (librdkafka only) | — |
 | Session timeout + `UnknownTopicOrPartition` in logs | Ephemeral topic cleanup race condition | INT-392 |
 | Producer timeout with single-replica topics | `min.insync.replicas` not copied to ephemeral topics | INT-384 |
 | `InconsistentGroupProtocol` error | Kafka Streams incompatibility (needs JVM proxy) | INT-226 |
@@ -77,6 +83,8 @@ All three template variables (`{{RANDOM}}`, `{{FALLBACK}}`, `{{ORIGINAL_TOPIC}}`
 
 ## Operator version requirements
 
-Some fixes require a minimum operator version:
-- **≥ 3.114.0**: JVM-based Kafka proxy (fixes Kafka Streams compatibility), custom temp topic naming
-- Always ask the user to check their operator version when troubleshooting: `kubectl get deploy mirrord-operator -n mirrord -o jsonpath='{.spec.template.spec.containers[0].image}'`
+Some features require a minimum version:
+- **≥ 3.114.0**: JVM-based Kafka proxy (Kafka Streams support), custom temp topic naming
+- **operator ≥ 3.170.0 / CLI ≥ 3.221.0**: `MirrordSplitConfig` + `MirrordPropertyList` (the current CRDs). On older operators, only the legacy CRDs exist.
+- **operator ≥ 3.183.0 / CLI ≥ 3.232.0**: `jq_filter` for Kafka (librdkafka client only).
+- Always check the operator version when troubleshooting: `kubectl get deploy mirrord-operator -n mirrord -o jsonpath='{.spec.template.spec.containers[0].image}'`
