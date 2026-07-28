@@ -73,18 +73,30 @@ operator:
   # requests reach the operator without kube-apiserver/front-proxy client certificates, for
   # example local development, custom API routing, or debugging through traffic interception.
   requireFrontProxyClientCert: true
-  # Define additional environment variables for the operator.
-  extraEnv: {}
+
+  # Define additional environment variables for the operator. Note that variables which reference
+  # other variables must be defined _after_ those that they reference, as variables are added to
+  # the manifest in order.
+  extraEnv:
+  #   MY_ENV_VAR: "value"
+  #   HOST_IP:
+  #     valueFrom:
+  #       fieldRef:
+  #         fieldPath: status.hostIP
+  #   MY_REFERENCED_VAR: "$(HOST_IP):$(MY_ENV_VAR)"
+
   # Define additional volume mounts for the operator container.
   # extraVolumeMounts:
   #   - name: my-secret
   #     mountPath: /etc/my-secret
   #     readOnly: true
+
   # Define additional volumes for the operator deployment.
   # extraVolumes:
   #   - name: my-secret
   #     secret:
   #       secretName: my-secret
+
   # Has to be set to `true` in order to use the SQS queue splitting feature.
   sqsSplitting: false
   # Has to be set to `true` in order to use the Kafka queue splitting feature.
@@ -112,6 +124,8 @@ operator:
   suspendFluxControllers: false
   # Has to be set to `true` in order to use the MySQL database branching feature.
   mysqlBranching: false
+  # Has to be set to `true` in order to use the MariaDB database branching feature.
+  mariadbBranching: false
   # Has to be set to `true` in order to use the PostgreSQL database branching feature.
   pgBranching: false
   # Has to be set to `true` in order to use the MongoDB database branching feature.
@@ -126,6 +140,8 @@ operator:
   spannerBranching: false
   # Has to be set to `true` in order to use the ClickHouse database branching feature.
   clickhouseBranching: false
+  # Has to be set to `true` in order to use the CockroachDB database branching feature.
+  cockroachdbBranching: false
   # Has to be set to `true` in order to use the generic (user-supplied image) database
   # branching feature. NOTE: enabling this lets users who can create branches run arbitrary
   # container images as branch pods (under the namespace default service account). Restrict
@@ -387,9 +403,11 @@ operator:
 
   ## The URL for OTel logs to be exported to in the cluster. If unset, logs will not be exported.
   ## This is independent of the logs printed to `stdout` (controlled by `logLevel`).
+  ## This value may reference values in `operator.extraEnv`, as it appears later in the manifest.
   # otelLogExportUrl: https://loki:3100/loki/app/v1/push
 
-  ## The URL for  OTeltraces to be exported to in the cluster. If unset, traces will not be exported.
+  ## The URL for OTel traces to be exported to in the cluster. If unset, traces will not be exported.
+  ## This value may reference values in `operator.extraEnv`, as it appears later in the manifest.
   # otelTraceExportUrl: https://tempo:4318/v1/traces
 
   ## Controls how long (in seconds) a session is allowed to live for.
@@ -518,6 +536,38 @@ operator:
   ##       cpu: "1"
   ##       memory: "1Gi"
 
+  # mariadbBranchConfig:
+  ## example
+  ##
+  ## dbPod:
+  ##   image:
+  ##     # Registry for the MariaDB branch container.
+  ##     # Defaults to `docker.io/library/mariadb` with tag `12`.
+  ##     registry: "custom-mariadb-registry"
+  ##   migrationImages:
+  ##     flyway:
+  ##       # Registry for the schema-migration image.
+  ##       # When unset, defaults to the upstream `flyway/flyway:12` image.
+  ##       # When set, this registry is used with the tag `12`.
+  ##       # The per-branch `migrations` config in mirrord.json can override the full image.
+  ##       registry: "custom-flyway-registry"
+  ##   imagePullSecrets:
+  ##     - name: "mariadb-registry-secret"
+  ##   imagePullPolicy: "IfNotPresent"
+  ##   labels: { "role": "database" }
+  ##   annotations: { "db.branch/owner-team": "platform" }
+  ##   volume:
+  ##     name: "mariadb-data"
+  ##     emptyDir:
+  ##       sizeLimit: "1Gi"
+  ##   resources:
+  ##     requests:
+  ##       cpu: "500m"
+  ##       memory: "512Mi"
+  ##     limits:
+  ##       cpu: "1"
+  ##       memory: "1Gi"
+
   # pgBranchConfig:
   ## example
   ##
@@ -539,6 +589,12 @@ operator:
   ##       # When set, this registry is used with the tag `12`.
   ##       # The per-branch `migrations` config in mirrord.json can override the full image.
   ##       registry: "custom-flyway-registry"
+  ##   # Glob patterns of images users may run as branch pods via the per-branch `image`
+  ##   # field in mirrord.json (which overrides the registry configured above). When this
+  ##   # list is absent, all images are allowed. Available on every `<db>BranchConfig`.
+  ##   allowedImages:
+  ##     - "registry.example.com/postgresql:*"
+  ##     - "docker.io/library/postgres:*"
   ##   # Image pull secrets for the PostgreSQL branch pod.
   ##   # The pod will use following images:
   ##   # * .pgBranchConfig.dbPod.image
@@ -669,6 +725,36 @@ operator:
   ##   annotations: { "db.branch/owner-team": "platform" }
   ##   volume:
   ##     name: "clickhouse-data"
+  ##     emptyDir:
+  ##       sizeLimit: "1Gi"
+  ##   resources:
+  ##     requests:
+  ##       cpu: "500m"
+  ##       memory: "512Mi"
+  ##     limits:
+  ##       cpu: "1"
+  ##       memory: "1Gi"
+
+  # cockroachdbBranchConfig:
+  ## example
+  ##
+  ## dbPod:
+  ##   image:
+  ##     # Registry for the CockroachDB branch container.
+  ##     # Defaults to `docker.io/cockroachdb/cockroach`.
+  ##     # Tag can be specified by the user when requesting a new branch, defaulting to `latest-v26.2`.
+  ##     registry: "custom-cockroachdb-registry"
+  ##   initImage:
+  ##     # Registry for the CockroachDB branch initContainer image.
+  ##     # Defaults to `docker.io/cockroachdb/cockroach`.
+  ##     registry: "custom-cockroachdb-registry"
+  ##   imagePullSecrets:
+  ##     - name: "cockroachdb-registry-secret"
+  ##   imagePullPolicy: "IfNotPresent"
+  ##   labels: { "role": "database" }
+  ##   annotations: { "db.branch/owner-team": "platform" }
+  ##   volume:
+  ##     name: "cockroachdb-data"
   ##     emptyDir:
   ##       sizeLimit: "1Gi"
   ##   resources:
