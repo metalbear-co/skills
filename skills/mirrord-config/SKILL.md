@@ -50,6 +50,43 @@ After generating any config:
 - Only present configs that pass schema validation
 - Include CLI validation output only when CLI validation was run
 
+## Your code is local by default — do not "fix" this with `fs.mode`
+
+**The single most common wrong config.** An agent reasons "the app must run my local source, so I need a local filesystem mode" and sets `fs.mode` to `local` or `localwithoverrides`. This is backwards. mirrord already reads your code locally in **every** fs mode, including the default `read`.
+
+A built-in local-by-default list applies in all modes (`mirrord/layer-lib/src/file/unix/read_local_by_default.rs`) and covers:
+
+- **The process's current working directory** — your entire project tree
+- **The executable being run**
+- Runtime and package-manager paths: `/node_modules`, `/package.json`, `.yarnrc*`, `.tool-versions`
+- Source and build artifacts by extension: `.js`, `.py`, `.pyc`, `.rb`, `.jar`, `.class`, `.so`, `.dll`, `.pdb`
+- System paths: `/usr`, `/lib`, `/bin`, `/etc`, `/home`, `/opt`, `/tmp`, `/proc`, `/sys`, `/dev`
+- Hidden files under `$HOME`
+
+So `ts-node`, `nodemon`, `python -m`, `go run`, `dotnet watch` etc. all load local source under the default config. **No `fs` setting is needed for that.** What `fs.mode: "read"` gives you on top is the *pod's* config files, secrets and mounted volumes — which is usually the entire reason to use mirrord.
+
+**Consequences of getting this wrong:** setting `local` or `localwithoverrides` silently cuts the app off from the remote pod's ConfigMaps, mounted Secrets, TLS certs and volumes. The app often still starts, then fails later in a way that looks unrelated to mirrord.
+
+**Correct reasons to reach for these modes — all of them are about the remote FS, never about local code:**
+
+| Need | Mode |
+|---|---|
+| Read pod config/secrets/volumes (almost always) | `read` — the default, so omit `fs` entirely |
+| App must write files that land in the pod | `write`, or list paths in `fs.read_write` |
+| Reading the pod's FS actively breaks the app, and you need nothing from it | `local` |
+| Same as `local`, but cluster DNS must keep working | `localwithoverrides` |
+
+`localwithoverrides` reads only `/etc/resolv.conf`, `/etc/hosts` and `/etc/hostname` remotely by default (`read_remote_by_default.rs`) — plus whatever you add to `fs.read_only` / `fs.read_write`. It is a *rescue for `local` mode*, not an upgrade to `read`. If you did not already need `local`, you do not need `localwithoverrides`.
+
+## Do not add config speculatively
+
+Every key in a generated config must be traceable to something the user actually asked for or a failure they actually reported. Do not add options because they seem prudent, and never present a change as required when it is a guess.
+
+- If a setting is a hypothesis about an unexplained failure (a timeout, a hang, a connection error), say so plainly and say what result would confirm or refute it. Do not write it up as "Needed: Yes."
+- Prefer changing one thing at a time over shipping a bundle of plausible-looking settings — a bundle makes it impossible to tell which key mattered.
+- Outgoing traffic is already remote by default (`network.outgoing.tcp`/`udp` default to `true`). An `outgoing.filter` is only correct when the user has stated that a *specific* destination must be reached from their machine, e.g. a service on their VPN that the cluster cannot route to. Adding a filter does not fix cluster-side timeouts.
+- When you cannot justify a key, leave it out. Minimal configs are a hard requirement of this skill, not a stylistic preference.
+
 ## Request Types
 
 ### Generate new config
@@ -103,7 +140,7 @@ User wants changes to their config.
 **Features:**
 - `"env": true` - Mirror environment variables
 - `"env": {"include": "VAR1;VAR2"}` - Selective inclusion
-- `"fs": "read"` - Read-only filesystem access
+- `"fs": "read"` - Read pod files, write locally. **This is the default — omit it unless overriding**
 - `"network": true` - Enable network mirroring
 - `"network": {"incoming": {"mode": "steal"}}` - Steal incoming traffic
 
@@ -138,6 +175,8 @@ Use JSON Pointer style: `/feature/network/incoming/mode`
 - User requests unsupported key → Say it's not in schema, suggest alternatives
 - Overly complex configs → Prefer minimal configs with only requested settings
 - Conflicting settings → Identify based on configuration.md semantics
+- "I need it to run my local code" → No `fs` setting required; local code is already local in every mode. Do **not** set `local`/`localwithoverrides`
+- Unexplained timeout or hang → Diagnose before configuring. Do not invent an `outgoing.filter` or an `fs` mode change and present it as a fix
 
 ## Security Boundaries
 
