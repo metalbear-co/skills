@@ -59,6 +59,10 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Without this the action falls back to an OIDC exchange with the
+          # Claude GitHub App. This step only edits local files, so the default
+          # token is enough.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: "Read .github/docs-sync-prompt.md and follow its instructions exactly."
           claude_args: |
             --model claude-sonnet-5
