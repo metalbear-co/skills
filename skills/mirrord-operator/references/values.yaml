@@ -43,6 +43,11 @@ operator:
   # ready to resume the work in case the leader exits (e.g. due to node failure).
   replicas: 1
 
+  # How long Kubernetes waits for an operator pod to exit after asking it to stop.
+  # The operator drains its tasks and then releases leadership, needing a little
+  # over 20 seconds.
+  terminationGracePeriodSeconds: 25
+
   # Override the pull policy, useful for local development.
   # imagePullPolicy: Always
 
@@ -618,6 +623,41 @@ operator:
   ##     limits:
   ##       cpu: "1"
   ##       memory: "1Gi"
+  ##   # How branch pods recreate the source database's roles.
+  ##   # `empty` (default): NOLOGIN shell roles, just enough for the schema restore.
+  ##   # `full`: real role attributes (LOGIN, ...) and role memberships, and the data copy
+  ##   # keeps table ownership and grants, so the branch enforces the same permissions as
+  ##   # the source. The user declared in the branch's connection config keeps its real
+  ##   # password on the branch (as a salted hash); PostgreSQL never exposes other roles'
+  ##   # passwords, so those restore without one.
+  ##   roles: "empty"
+  ##
+  ## Named profiles: alternative complete baselines next to the default `dbPod` above,
+  ## selected per branch with `"profile": "<name>"` in mirrord.json. A profile accepts
+  ## the same fields as `dbPod` (registries, migrationImages, allowedImages, pull
+  ## secrets, resources, ...) and is not an overlay - fields left unset get the built-in
+  ## defaults, not the values from the default `dbPod`. Available on every
+  ## `<db>BranchConfig`.
+  ##
+  ## `allowedImages` is the one field a profile inherits when it does not set its own
+  ## list, because an unset list means "any image is allowed" and a profile added for an
+  ## unrelated reason should not quietly widen your image policy. Set
+  ## `allowedImages: ["*"]` in a profile to allow anything on purpose, or `[]` to allow
+  ## no user-supplied images at all.
+  ##
+  ## profiles:
+  ##   team-analytics:
+  ##     dbPod:
+  ##       image:
+  ##         registry: "pgvector/pgvector"
+  ##       initImage:
+  ##         registry: "pgvector/pgvector"
+  ##       migrationImages:
+  ##         flyway:
+  ##           registry: "custom-flyway-registry"
+  ##       allowedImages: ["pgvector/*"]
+  ##       imagePullSecrets:
+  ##         - name: "analytics-registry-secret"
 
   # mongodbBranchConfig:
   ## example
@@ -681,6 +721,32 @@ operator:
   ##     - "--tls-auth-clients"
   ##     - "no"
   ##   tls: true
+  ##
+  ## Named profiles let one cluster hold several complete pod baselines at once
+  ## (e.g. a TLS setup and a plain one). Users select one per branch with
+  ## `"profile": "<name>"` in their mirrord config; without it, the top-level
+  ## dbPod applies. A profile is a complete dbPod (same fields as above), not an
+  ## overlay - fields left unset get the built-in defaults, never the top-level
+  ## values. The exception is `allowedImages`, which a profile inherits unless it
+  ## sets its own list, so adding a profile never quietly widens your image policy;
+  ## use `allowedImages: ["*"]` to allow anything on purpose, or `[]` to allow no
+  ## user-supplied images. Every <db>BranchConfig supports `profiles`, not just Redis.
+  ##
+  ## profiles:
+  ##   tls-baseline:
+  ##     dbPod:
+  ##       allowedImages:
+  ##         - "registry.example.com/team/redis-tls:*"
+  ##       dbServerArgs:
+  ##         - "--tls-port"
+  ##         - "6379"
+  ##         - "--port"
+  ##         - "0"
+  ##         - "--tls-cert-file"
+  ##         - "/certs/tls.crt"
+  ##         - "--tls-key-file"
+  ##         - "/certs/tls.key"
+  ##       tls: true
 
   # spannerBranchConfig:
   ## example
@@ -764,6 +830,81 @@ operator:
   ##     limits:
   ##       cpu: "1"
   ##       memory: "1Gi"
+  ##
+  ## Sources behind certificate verification (sslmode=verify-ca/verify-full against a
+  ## private CA) or mTLS are supported via a `MirrordPropertyList` named
+  ## `cockroachdb-source-tls` in the target's namespace - not via chart values - so each
+  ## namespace can point at its own cert Secret. The object name can be overridden with
+  ## `dbPod.sourceTlsPropertyList: "my-name"`. tlsClientCert/tlsClientKey must be set
+  ## together and are omitted when the source only needs a trusted CA (tlsCaCert):
+  ##
+  ##   apiVersion: mirrord.metalbear.co/v1
+  ##   kind: MirrordPropertyList
+  ##   metadata:
+  ##     name: cockroachdb-source-tls
+  ##     namespace: my-app-namespace
+  ##   spec:
+  ##     properties:
+  ##       - name: tlsCaCert
+  ##         valueFrom:
+  ##           secretKeyRef: { name: my-db-certs, key: ca.crt }
+  ##       - name: tlsClientCert
+  ##         valueFrom:
+  ##           secretKeyRef: { name: my-db-certs, key: client.myservice.crt }
+  ##       - name: tlsClientKey
+  ##         valueFrom:
+  ##           secretKeyRef: { name: my-db-certs, key: client.myservice.key }
+  ##
+  ## `dbPod.sourceSslmode` sets a cluster-wide default sslmode for the copy connection to
+  ## the source. An explicit sslmode in a session's connection URL or params still wins.
+  ## Without it the default is verify-full when the property list provides certs, disable
+  ## otherwise. Note verify-ca/verify-full still need the property list - without a CA the
+  ## copy fails rather than silently downgrading:
+  ##
+  ##   dbPod:
+  ##     sourceSslmode: "verify-full"
+
+  # genericBranchConfig:
+  ## example
+  ##
+  ## Generic branches always run a user-supplied image (see the `genericBranching` flag
+  ## note above), so `allowedImages` is the main lever here. `image`/`initImage`
+  ## registries, `dbServerArgs`, `tls`, and default volumes are not consulted for generic
+  ## branches - the user's image, command, and args are used as given.
+  ##
+  ## dbPod:
+  ##   allowedImages:
+  ##     - "valkey/*"
+  ##     - "influxdb:*"
+  ##   imagePullSecrets:
+  ##     - name: "generic-registry-secret"
+  ##   imagePullPolicy: "IfNotPresent"
+  ##   labels: { "role": "database" }
+  ##   annotations: { "db.branch/owner-team": "platform" }
+  ##   resources:
+  ##     requests:
+  ##       cpu: "250m"
+  ##       memory: "256Mi"
+  ##     limits:
+  ##       cpu: "1"
+  ##       memory: "1Gi"
+  ##
+  ## Named profiles work here like for every other database type: keep the default
+  ## locked with `allowedImages: []` and grant each team its own images, pull secrets,
+  ## and resource budget. Users select one per branch with `"profile": "<name>"`.
+  ## A profile that does not set `allowedImages` inherits the default's, so with a
+  ## locked default a profile only ever runs the images it lists itself.
+  ##
+  ## profiles:
+  ##   team-search:
+  ##     dbPod:
+  ##       allowedImages:
+  ##         - "registry.example.com/search/*"
+  ##       imagePullSecrets:
+  ##         - name: "search-registry-secret"
+  ##       resources:
+  ##         limits:
+  ##           memory: "2Gi"
 
 agent:
   ## example
