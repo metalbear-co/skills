@@ -206,6 +206,10 @@ Tag the session with a known key (`mirrord exec --key`) so the pipeline can find
       [ -n "$SESSION_ID" ] && break
       sleep 2
     done
+    if [ -z "$SESSION_ID" ]; then
+      echo "ERROR: session 'chaos-ci' not found after retries" >&2
+      exit 1
+    fi
 
     # Apply every chaos rule checked into the repo
     for rule in .mirrord/chaos/*.json; do
@@ -214,12 +218,12 @@ Tag the session with a known key (`mirrord exec --key`) so the pipeline can find
 
     npm test
 
-    # Teardown
+    # Teardown: clear the rules and stop the UI server that mirrord chaos auto-started
     mirrord chaos delete -s "$SESSION_ID"
     mirrord ui stop
 ```
 
-Polling note: session registration is asynchronous, so `mirrord session list` may not show the session right after `mirrord exec` starts. The retry loop above covers it. `mirrord session list` prints a table; the `awk` pulls the Session ID column of the row whose key matches.
+Polling note: session registration is asynchronous, so `mirrord session list` may not show the session right after `mirrord exec` starts. The retry loop above covers it. `mirrord session list` prints a table with `|`-separated columns and the Session ID first; the `awk` pulls field `$2` (the ID) from the row whose key matches. If the table layout changes in a future release, update the snippet; the empty-ID guard turns that breakage into a clear error instead of a silent one.
 
 ## Common Issues
 
@@ -242,7 +246,7 @@ Polling note: session registration is asynchronous, so `mirrord session list` ma
 3. **Get the session ID**: printed by `mirrord exec`, or from `mirrord session list`.
 4. **Generate the rule as a JSON file**, not an inline shell string: files are reusable, reviewable, and CI-friendly.
 5. **Validate the rule shape before suggesting it**: one effect per rule, latency needs `read_ms` or `write_ms` non-zero, `type` is one of `reset` / `timed_out` / `refused`, TCP upstream selectors only.
-6. **Always include teardown in CI**: `mirrord chaos delete -s <session>` and `mirrord ui stop`.
+6. **Always include teardown in CI**: `mirrord chaos delete -s <session>` to clear the rules, and `mirrord ui stop` to stop the UI server that `mirrord chaos` auto-started.
 
 ## Example Interaction
 
