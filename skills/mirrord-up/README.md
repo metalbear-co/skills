@@ -7,9 +7,10 @@ Run **multiple concurrent mirrord sessions** from one `mirrord-up.yaml` — comp
 This skill helps AI agents:
 
 - **Generate** or explain `mirrord-up.yaml` (`common`, `services`, targets, filters, `run`)
-- **Guide** `mirrord up`, `mirrord up init`, and CLI flags (`-f`, `--key`, `-m`, `-u`)
-- **Explain** default **split** mode and the auto HTTP filter based on the session key
-- **Warn** that `services.*.messages` (queue splitting) is not supported in `mirrord up` yet
+- **Guide** `mirrord up`, `mirrord up init`, and CLI flags (`-f`, `--key`, `-m`/`--mode`, `-u`)
+- **Explain** service modes: default **split** (auto HTTP filter based on the session key) vs. **replace** (local process takes over the service; the deployed workload is scaled to zero for the session and restored after) — and warn about `replace`'s impact on shared clusters
+- **Explain** queue splitting, which works automatically for services in both `split` and `replace` mode (no `mirrord-up.yaml` field needed) for supported brokers
+- **Explain** Tera templating in `mirrord-up.yaml` (`{{ key }}`, `get_env(...)`) for injecting the session key or per-developer environment values
 
 ## Example prompts
 
@@ -21,6 +22,10 @@ This skill helps AI agents:
 "What does mirrord up init do?"
 
 "How does the session key work with mirrord up HTTP filters?"
+
+"What's the difference between split and replace mode?"
+
+"How do I use env vars / templating in mirrord-up.yaml?"
 ```
 
 ## Prerequisites
@@ -58,6 +63,7 @@ mirrord up
 mirrord up -f mirrord-up-custom.yaml
 mirrord up --key my-session-key
 mirrord up -u   # also start mirrord ui in the background
+mirrord up -m replace   # override every service's default_mode for this run
 ```
 
 ## Learn more
