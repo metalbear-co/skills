@@ -128,7 +128,7 @@ Most features are **off by default** and gated behind a Helm value under `operat
 | SQS queue splitting | `operator.sqsSplitting: true` |
 | Kafka queue splitting | `operator.kafkaSplitting: true` (+ `operator.kafkaSplittingSidecar.enabled` for Kafka Streams / JVM clients) |
 | RabbitMQ / GCP Pub/Sub / Azure Service Bus / Redis Pub/Sub / Temporal / BullMQ splitting | `operator.rmqSplitting` / `gcpPubsubSplitting` / `azureServiceBusSplitting` / `redisPubsubSplitting` / `temporalSplitting` / `bullmqSplitting` |
-| DB branching (per engine) | `operator.mysqlBranching`, `pgBranching`, `mariadbBranching`, `mongodbBranching`, `mssqlBranching`, `redisBranching`, `dynamodbBranching`, `clickhouseBranching`, `spannerBranching` |
+| DB branching (per engine) | `operator.mysqlBranching`, `pgBranching`, `mariadbBranching`, `mongodbBranching`, `mssqlBranching`, `redisBranching`, `dynamodbBranching`, `clickhouseBranching`, `cockroachdbBranching`, `spannerBranching` |
 | Generic DB branching (user-supplied images) | `operator.genericBranching: true` (⚠️ lets branch creators run arbitrary images; restrict with `genericBranchConfig.dbPod.allowedImages`) |
 | Preview environments | `operator.previewEnv: true` (+ `operator.shareIngress.shareDomain` and the `mirrord-share-ingress` chart for link sharing) |
 | Multi-cluster orchestration | `operator.multiCluster.enabled: true` on the **primary** cluster; `operator.multiClusterMember: true` on members |

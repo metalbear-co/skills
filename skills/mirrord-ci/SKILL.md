@@ -3,7 +3,7 @@ name: mirrord-ci
 description: Help users set up mirrord in CI pipelines for testing against real Kubernetes environments. Use when users want to run end-to-end tests, integration tests, or automated tests in CI using mirrord to connect to staging/shared clusters.
 metadata:
   author: MetalBear
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Mirrord CI Skill
@@ -117,9 +117,9 @@ npm test
 mirrord ci stop
 ```
 
-## CI API Key (for mirrord Teams/Enterprise)
+## CI API Key (for mirrord Enterprise)
 
-If using mirrord Operator, generate a CI API key to avoid consuming seats:
+This only applies to the Enterprise plan; if you're on the open-source version of mirrord, skip this section. When the mirrord Operator is installed in the cluster, `mirrord ci` commands require a CI API key, and generating one requires an Enterprise plan. Without it, every CI runner registers as a new user and consumes a seat:
 
 ```bash
 # Generate the key (run locally, not in CI)
@@ -418,7 +418,7 @@ If your pod has multiple containers, specify the target container explicitly:
 2. **Verify prerequisites** - kubectl access, mirrord version
 3. **Provide platform-specific examples** - Use the appropriate YAML/Groovy syntax
 4. **Include cleanup steps** - Always show `mirrord ci stop` in appropriate hooks
-5. **Mention API key** - Remind about `MIRRORD_CI_API_KEY` for Teams users
+5. **Mention API key** - Remind about `MIRRORD_CI_API_KEY` for Enterprise users
 
 ## Example Interaction
 
@@ -433,7 +433,7 @@ If your pod has multiple containers, specify the target container explicitly:
    - `mirrord ci start` with their target
    - Test execution
    - `mirrord ci stop` in `if: always()` block
-4. Mention: `MIRRORD_CI_API_KEY` if using Teams/Enterprise
+4. Mention: `MIRRORD_CI_API_KEY` if using the Enterprise plan
 
 ## Learn More
 
