@@ -69,10 +69,23 @@ jobs:
             --max-turns 80
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git diff:*),Bash(git log:*),Bash(ls:*)"
 
+      # The enterprise blocks GITHUB_TOKEN from creating pull requests, so
+      # gh pr create authenticates as the Cubby app instead (same pattern as
+      # auto-release-pr in mirrord/operator).
+      - name: Create app token for PR creation
+        if: env.skip != 'true'
+        id: app_token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        with:
+          app-id: ${{ secrets.CUBBY_CLIENT_ID }}
+          private-key: ${{ secrets.CUBBY_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Commit and open PR
         if: env.skip != 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
           echo "$HEAD_SHA" > .github/docs-sync-sha
           rm -rf docs-src
