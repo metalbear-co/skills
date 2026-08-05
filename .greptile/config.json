@@ -1,3 +1,4 @@
 {
+  "excludeAuthors": ["cubby-mb[bot]"],
   "disabledLabels": ["no-greptile"]
 }
