@@ -1,4 +1,4 @@
 {
-  "excludeAuthors": ["cubby-mb[bot]"],
+  "excludeAuthors": ["cubby-mb[bot]", "github-actions[bot]"],
   "disabledLabels": ["no-greptile"]
 }
