@@ -47,7 +47,9 @@ sh install.sh --dest <dir>      # anywhere else
 npx skills add metalbear-co/skills
 ```
 
-Using an agent that doesn't consume Agent Skills yet? The same content can be ported to `.cursorrules`, `agents.md`, Cline rules, and similar. Open an issue with the target you'd like next.
+### GitHub Copilot, Cline, and other rules-file agents
+
+The [`ports/`](./ports/) directory carries the same core content as drop-in rules files: copy [`ports/github-copilot/copilot-instructions.md`](./ports/github-copilot/copilot-instructions.md) into your repo's `.github/`, or [`ports/cline/.clinerules`](./ports/cline/.clinerules) into your repo root. Want another format? [Open an issue](https://github.com/metalbear-co/skills/issues) with the target you'd like next.
 
 ## The nine skills
 
