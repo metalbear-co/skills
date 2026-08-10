@@ -268,12 +268,26 @@ operator:
     # When false: Primary is also a workload cluster
     managementOnly: true
 
-    # Timeout for waiting for remote sessions to become ready (seconds)
-    remoteSessionTimeoutSecs: 300
+    # These three are commented out on purpose. `remoteSessionTimeoutSeconds` and
+    # `sessionTtlSeconds` replace `remoteSessionTimeoutSecs` and `sessionTtlSecs`, and both
+    # spellings are honored. Shipping a value here would make the new name always set, so a values
+    # file still using the old name would be ignored on upgrade. The defaults below live in the
+    # ConfigMap template instead.
 
-    # TTL for multi-cluster sessions (seconds)
-    # Sessions are deleted when no client has been connected for this duration
-    sessionTtlSecs: 60
+    # Timeout for waiting for remote sessions to become ready (seconds). Defaults to 300.
+    # remoteSessionTimeoutSeconds: 300
+
+    # TTL for multi-cluster sessions (seconds). Defaults to 60.
+    # Sessions are deleted when no client has been connected for this duration.
+    # Only applies once a client has connected; until then sessionSetupDeadlineSeconds applies.
+    # sessionTtlSeconds: 60
+
+    # How long a multi-cluster session may wait for its first client connection (seconds).
+    # Defaults to 180.
+    # Sessions are created on every cluster before any client connects, and setting them up can
+    # take a while when queue splitting waits for target pods to roll. Deleting a session also
+    # deletes its child sessions on every cluster, so this must outlast setup.
+    # sessionSetupDeadlineSeconds: 180
 
     # Remote cluster configuration
     #
@@ -418,6 +432,19 @@ operator:
   ## Controls how long (in seconds) a session is allowed to live for.
   # maxSessionTimeSeconds: 3600
 
+  ## Controls how long (in seconds) a session that a client has already connected to may go
+  ## unused before it is closed. Defaults to 30 seconds.
+  ## Raise this when clients are disconnected by slow or unreliable networks. The cost is that
+  ## agents and patched workloads are held longer after a client really does go away.
+  # sessionUnusedTtlSeconds: 30
+
+  ## Controls how long (in seconds) a session may wait for its first client connection before it
+  ## is closed. Defaults to 180 seconds.
+  ## Raise this when setting up a session takes longer than the default, for example when queue
+  ## splitting waits for slow-rolling target pods, or when multi-cluster sessions are created
+  ## well before a client reaches each cluster.
+  # sessionSetupDeadlineSeconds: 180
+
   ## Controls how long (in milliseconds) a session can live when there are no pods ready to be targeted.
   ## When this value is not set when installing the chart, the default value of 60000 (60 seconds) is used.
   # noPodTargetsSessionTimeoutMillis: 60000
@@ -471,7 +498,7 @@ operator:
     memory: 100Mi
 
   limits:
-    cpu: 200m
+    cpu: 500m
     memory: 200Mi
 
   ## Allow to specify tolerations for operator deployment
@@ -594,6 +621,21 @@ operator:
   ##       # When set, this registry is used with the tag `12`.
   ##       # The per-branch `migrations` config in mirrord.json can override the full image.
   ##       registry: "custom-flyway-registry"
+  ##   # Environment for container-flavor migration Jobs. `inherit` (default true) hands the
+  ##   # Job the target container's env and envFrom, so an app image boots the same way its
+  ##   # real pods do; `env`/`envFrom` are admin extras in plain Kubernetes shapes, so
+  ##   # `valueFrom`/`secretRef` keep secret values in-cluster. Admin entries override
+  ##   # inherited ones by name, but never the operator's redirect of the declared connection
+  ##   # vars to the branch; the per-branch `migrations.env` in mirrord.json overrides
+  ##   # everything. Available on every `<db>BranchConfig`.
+  ##   migrationEnv:
+  ##     inherit: true
+  ##     env:
+  ##       - name: RAILS_ENV
+  ##         value: development
+  ##     envFrom:
+  ##       - configMapRef:
+  ##           name: shared-migration-config
   ##   # Glob patterns of images users may run as branch pods via the per-branch `image`
   ##   # field in mirrord.json (which overrides the registry configured above). When this
   ##   # list is absent, all images are allowed. Available on every `<db>BranchConfig`.
