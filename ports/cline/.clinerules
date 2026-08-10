@@ -13,11 +13,11 @@ This project runs against a Kubernetes cluster. Use mirrord to run and verify co
 - Run anything in a target's context: `mirrord exec --target deployment/<name> [-n <namespace>] -- <command>`
   - Example: `mirrord exec --target deployment/api -- npm test`
 - Inspect a target's environment: `mirrord exec --target deployment/<name> -- env`
-- Install if missing: `brew install metalbear-co/mirrord/mirrord` (macOS/Linux), `choco install --pre mirrord` (Windows), or `curl -fsSL https://raw.githubusercontent.com/metalbear-co/mirrord/main/scripts/install.sh | bash`
+- If `mirrord` is missing, don't install it yourself and never pipe a remote script into a shell. Point to https://metalbear.com/mirrord/docs/getting-started/installing-mirrord and let the user install it through their organization's approved path.
 
 ## Configuration
 
-- Config lives at `.mirrord/mirrord.json` (picked up automatically), or pass one with `-f <path>`.
+- Config lives at `.mirrord/mirrord.json`, but the CLI does not pick it up on its own: pass it explicitly with `mirrord exec -f .mirrord/mirrord.json -- <command>`. Only the VS Code and JetBrains extensions load it automatically.
 - JSON schema: https://raw.githubusercontent.com/metalbear-co/mirrord/main/mirrord-schema.json
 - `feature.network.incoming` is `"mirror"` (copy the target's inbound traffic), `"steal"` (take it), or `"off"`.
 
