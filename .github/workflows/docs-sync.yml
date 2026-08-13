@@ -63,6 +63,10 @@ jobs:
           # Claude GitHub App. This step only edits local files, so the default
           # token is enough.
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # The action hides the SDK stream by default, which swallows the error
+          # message when a run fails before Claude does any work. This job only
+          # reads public docs and skill files, so there is nothing to redact.
+          show_full_output: true
           prompt: "Read .github/docs-sync-prompt.md and follow its instructions exactly."
           claude_args: |
             --model claude-sonnet-5
