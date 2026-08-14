@@ -3,7 +3,7 @@ name: mirrord-operator
 description: Help users install and configure the mirrord Operator for team/enterprise environments. Use when users ask about operator setup, Helm installation, cloud API key or license configuration, air-gapped/offline licensing, enabling features (queue splitting, DB branching, preview environments, multi-cluster), internal registries, OpenShift/GKE Autopilot, RBAC, or multi-user mirrord deployments.
 metadata:
   author: MetalBear
-  version: "2.4"
+  version: "2.5"
 ---
 
 # Mirrord Operator Skill
@@ -80,19 +80,20 @@ The operator needs credentials to obtain its license. Pick **one** path:
 
 **A. Cloud API key (default, recommended).** The operator authenticates to the mirrord cloud with a **cloud API key** and obtains its license over the API. Generate the key in the dashboard under **Settings** at [app.metalbear.com](https://app.metalbear.com) — it's shown **only once**. Provide it one of three ways:
 
-- **Kubernetes Secret (recommended)** — the user creates the Secret; the key never lives in `values.yaml`. Write the key to a file (its **exact** contents, no trailing newline) and create the Secret with `--from-file`, so the key isn't exposed in the shell's process arguments (`ps`) or history — then delete the file. (Avoid `--from-literal=apiKey=...`, which places the key in argv.)
+- **Kubernetes Secret (recommended)** — the user creates the Secret; the key never lives in `values.yaml`. Point the chart at the secret name now (this doesn't require the secret to exist yet):
+  ```yaml
+  cloud:
+    apiKey:
+      keyRef: mirrord-operator-cloud-api-key
+  ```
+  **Install the chart first** (Step 3 — this also creates the `mirrord` namespace), then have the user create the Secret in it. Write the key to a file (its **exact** contents, no trailing newline) and create the Secret with `--from-file`, so the key isn't exposed in the shell's process arguments (`ps`) or history — then delete the file. (Avoid `--from-literal=apiKey=...`, which places the key in argv.)
   ```bash
   # apikey.txt holds only the key, with no trailing newline
   kubectl create secret generic mirrord-operator-cloud-api-key \
     --namespace mirrord --from-file=apiKey=./apikey.txt
   rm apikey.txt
   ```
-  The Secret's data key must be `apiKey` (what `cloud.apiKey.keyRef` expects). A stray trailing newline in the file becomes part of the key and breaks authentication.
-  ```yaml
-  cloud:
-    apiKey:
-      keyRef: mirrord-operator-cloud-api-key
-  ```
+  The Secret's data key must be `apiKey` (what `cloud.apiKey.keyRef` expects). A stray trailing newline in the file becomes part of the key and breaks authentication. The operator pod waits for the Secret to appear and starts automatically once it's created — no restart needed. (If the user wants to create the Secret *before* installing instead, the `mirrord` namespace must already exist and be Helm-managed, or `helm install` will fail to adopt it.)
 - **Google Secret Manager** — `cloud.apiKey.gsmRef: projects/PROJECT_ID/secrets/SECRET_NAME/versions/latest` (read via Application Default Credentials; see `sa.gcpSa`).
 - **Inline (dev/test only)** — `cloud.apiKey.key: <YOUR_API_KEY>` (lands in the pod spec as plaintext; avoid for real clusters).
 
@@ -151,11 +152,12 @@ Air-gapped clusters can't reach the cloud to exchange an API key for a license, 
             <contents of your license.pem>
             -----END CERTIFICATE-----
   ```
-- **License PEM via Secret** — create the Secret and reference it with `license.pemRef`:
+- **License PEM via Secret** — reference the Secret name with `license.pemRef` (doesn't require the secret to exist yet). **Install the chart first** (creates the `mirrord` namespace), then create the Secret in it:
   ```bash
   kubectl create secret generic mirrord-operator-license-pem \
     --namespace mirrord --from-file=license.pem=/path/to/license.pem
   ```
+  The operator pod waits for the Secret to appear and starts automatically once it's created — no restart needed. (To create the Secret first instead, the `mirrord` namespace must already exist and be Helm-managed, or `helm install` will fail to adopt it.)
 - **License server** (fully self-hosted) — set `license.licenseServer: http://mirrord-operator-license-server.mirrord.svc`. Here the **license key** is the shared secret the operator uses to authenticate to your server (a value you choose), and remains required.
 
 > Air-gapped is Enterprise-only. Don't suggest the free/self-serve trial for offline clusters — the trial license needs connectivity to mirrord's telemetry endpoints.

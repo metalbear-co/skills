@@ -7,7 +7,7 @@ description: >
   or managing multiple mirrord sessions' lifecycle in one command.
 metadata:
   author: MetalBear
-  version: "1.1"
+  version: "1.2"
 ---
 
 # mirrord up Skill
@@ -17,6 +17,8 @@ metadata:
 Help users create and run **multiple concurrent mirrord sessions** from one config file — think docker compose, but for mirrord — as documented in [Multiple concurrent sessions (mirrord up)](https://metalbear.com/mirrord/docs/using-mirrord/multiple-concurrent-sessions).
 
 Useful when they need to debug **several related microservices** and manage those sessions' lifecycle together.
+
+Each `services` entry is typically a **different** application with its own target, command, and configuration — `mirrord up` is for running several distinct applications together, not for targeting multiple pods of the *same* application. For that (label-based targeting), point users to the **mirrord-operator** or **mirrord-config** skill instead of trying to model it with `mirrord-up.yaml`.
 
 ## When to Use This Skill
 
@@ -177,9 +179,9 @@ Maps to `feature.network.incoming.ignore_ports`.
 
 1. Set up queue splitting for the target and enable the relevant queue-splitting feature in the mirrord operator, per the target's `MirrordSplitConfig` (see the Queue Splitting guide, linked from the official docs).
 2. Start `mirrord up` with a session key, e.g. `mirrord up --key checkout-debug`.
-3. Messages intended for the session must contain `mirrord-session=checkout-debug`. This is matched in broker-specific message metadata (SQS message attributes, Google Cloud Pub/Sub attributes, Azure Service Bus application properties, Temporal headers) or, for Redis Pub/Sub and BullMQ, in the message payload.
+3. Messages intended for the session must contain `mirrord-session=checkout-debug`. This is matched in broker-specific message metadata (Kafka headers, SQS message attributes, Google Cloud Pub/Sub attributes, Azure Service Bus application properties, Temporal headers) or, for Redis Pub/Sub and BullMQ, in the message payload.
 
-Supported brokers: Amazon SQS, Google Cloud Pub/Sub, Azure Service Bus, Redis Pub/Sub, Temporal, and BullMQ. Kafka and RabbitMQ aren't supported yet in `mirrord up`.
+Supported brokers: Kafka, Amazon SQS, Google Cloud Pub/Sub, Azure Service Bus, Redis Pub/Sub, Temporal, and BullMQ. RabbitMQ isn't supported yet in `mirrord up`.
 
 Only messages containing the session key are routed to the local session; all other messages continue to the deployed target.
 
@@ -247,7 +249,7 @@ Workload inference and cluster prompts happen later when running `mirrord up`, n
 
 | Issue | Guidance |
 |-------|----------|
-| Want queue splitting in `mirrord-up.yaml` | No config-file field needed — it's automatic (`split` and `replace` modes both) once `MirrordSplitConfig` + the operator feature are set up and the session runs with a `--key`. Only Amazon SQS, Google Cloud Pub/Sub, Azure Service Bus, Redis Pub/Sub, Temporal, and BullMQ are supported; Kafka and RabbitMQ aren't supported yet in `mirrord up` — use a normal `mirrord.json` + queue skills (e.g. Kafka) instead |
+| Want queue splitting in `mirrord-up.yaml` | No config-file field needed — it's automatic (`split` and `replace` modes both) once `MirrordSplitConfig` + the operator feature are set up and the session runs with a `--key`. Kafka, Amazon SQS, Google Cloud Pub/Sub, Azure Service Bus, Redis Pub/Sub, Temporal, and BullMQ are supported; RabbitMQ isn't supported yet in `mirrord up` — use a normal `mirrord.json` + queue skills instead |
 | Traffic isolation | Default split filter uses session key; set `--key` / `MIRRORD_KEY` and/or explicit `http_filter` when sharing a cluster |
 | Considering `replace` mode | It scales the real workload to zero for **everyone** for the session's duration; only suggest it on non-shared clusters/environments, and confirm the target is a deployment/statefulset/replicaset |
 | One service exits | The whole `mirrord up` session stops when any child session shuts down |
@@ -258,7 +260,7 @@ Workload inference and cluster prompts happen later when running `mirrord up`, n
 1. Prefer **`mirrord up init`** for new users; hand-edit YAML for known stacks.
 2. Stay within documented fields only — do not invent keys beyond the official page.
 3. Default to **`split`** mode in examples; only suggest `replace` (or `--mode replace`) when the user explicitly wants full local takeover of a service, and pair it with the shared-cluster warning.
-4. Note that Kafka/RabbitMQ queue splitting is **not yet supported** in `mirrord up` if the user asks for it; other supported brokers work automatically, no `mirrord-up.yaml` field required.
+4. Note that RabbitMQ queue splitting is **not yet supported** in `mirrord up` if the user asks for it; other supported brokers (including Kafka) work automatically, no `mirrord-up.yaml` field required.
 5. For single-process or `mirrord.json`-only work, point them to **mirrord-config** / **mirrord-quickstart**; this skill is multi-service compose via `mirrord up`.
 6. For operator / Teams concurrent use on the cluster side, use **mirrord-operator** when relevant (`common.operator`).
 

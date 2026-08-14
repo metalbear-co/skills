@@ -2251,6 +2251,55 @@
             "flavor",
             "path"
           ]
+        },
+        {
+          "description": "Run your own image as the migration Job. The Job inherits the target container's\n`env`/`envFrom`, with the branch's `connection` variables redirected into it, so most\nmigration tools need no manual `env` wiring.",
+          "type": "object",
+          "properties": {
+            "flavor": {
+              "type": "string",
+              "const": "container"
+            },
+            "image": {
+              "description": "Full image reference for the migration container, including the tag.",
+              "type": "string"
+            },
+            "command": {
+              "description": "Entrypoint command override. When unset, the image's own entrypoint runs.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "args": {
+              "description": "Entrypoint args override.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "env": {
+              "description": "Extra environment variables for the container. Entries here override inherited\nvalues of the same name.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "flavor",
+            "image"
+          ]
         }
       ]
     }

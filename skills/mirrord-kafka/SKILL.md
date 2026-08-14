@@ -12,7 +12,7 @@ description: >
   Kafka, or connecting mirrord to a Kafka cluster. This is a Team/Enterprise feature of mirrord.
 metadata:
   author: MetalBear
-  version: "2.0"
+  version: "2.1"
 ---
 
 # mirrord Kafka Splitting Configuration Skill
@@ -114,7 +114,7 @@ operator:
 ### 2. Generate MirrordPropertyList (Kafka connection)
 
 Rules:
-- **Same namespace as the target workload** (not the operator namespace — that's the deprecated model).
+- **Default to the target workload's namespace** (same namespace as its `MirrordSplitConfig`) — this is the recommended primary location for a single team's connection config, and it wins if a list of the same name also exists in the operator's namespace. The operator (**3.191.0+**) also looks up the list in its **own namespace** as a fallback, so one connection config can be shared across many teams/namespaces — only reach for that when the user explicitly wants shared/cluster-wide credentials. ConfigMap/Secret refs inside the list resolve in whichever namespace the list itself was found in.
 - **Never set `group.id`** — mirrord manages the operator's consumer group.
 - Use `valueFrom.secretKeyRef` for any credential (SASL password, SSL PEMs, key password).
 - For AWS MSK IAM: set `mirrord.auth.kind: MSK_IAM` + `mirrord.auth.aws_region` (auto-adds `OAUTHBEARER` + `SASL_SSL`).
@@ -145,7 +145,7 @@ Rules:
 - `spec.targetRef` = `{ apiVersion, kind, name }` (Deployment/StatefulSet/Rollout).
 - Each `spec.queues[]` needs `id`, `kind: kafka`, a `clientConfig` (the `MirrordPropertyList` name; or set once via `spec.clientConfigs.kafka`), and `appConfig.topic`.
 - **Exactly one of `appConfig.groupId` (standard consumers) or `appConfig.appId` (Kafka Streams)** per queue.
-- For slow-restarting workloads (StatefulSets, Rollouts), consider `spec.restart.timeout` and `spec.drainTimeout` (keeps the split warm so a new session skips the restart).
+- For slow-restarting workloads (StatefulSets, Rollouts), consider `spec.restart.timeout` (pod readiness wait after a restart), `spec.ttl` (idle window: keeps the split fully live so a reconnecting session resumes instantly, requires operator **3.194.0+**), and `spec.drainTimeout` (drain window that follows: lets the workload finish the already-forwarded backlog before unpatching). On operators older than 3.194.0, `spec.drainTimeout` alone controls how long the workload stays patched after the last session.
 
 ```yaml
 apiVersion: queues.mirrord.metalbear.co/v1
@@ -223,7 +223,7 @@ If the user has the mirrord-config skill, point them there for the full mirrord.
 ## Validation
 
 ### Required field checks
-- [ ] `MirrordPropertyList` is in the **target's** namespace and has `bootstrap.servers`; does **not** set `group.id`.
+- [ ] `MirrordPropertyList` (in the target's namespace, or the operator's namespace if sharing) has `bootstrap.servers`; does **not** set `group.id`.
 - [ ] `MirrordSplitConfig` is in the target's namespace with `spec.targetRef` (`apiVersion`, `kind`, `name`).
 - [ ] Each queue has `id`, `kind: kafka`, a `clientConfig` (or `spec.clientConfigs.kafka`), and `appConfig.topic`.
 - [ ] Each queue has **exactly one** of `appConfig.groupId` or `appConfig.appId`.
@@ -231,7 +231,7 @@ If the user has the mirrord-config skill, point them there for the full mirrord.
 - [ ] Topic IDs are unique (object form) and match the IDs used in mirrord.json.
 
 ### Cross-reference checks
-- [ ] Each queue's `clientConfig` names a `MirrordPropertyList` in the same namespace (or a legacy `MirrordKafkaClientConfig` of that name in the operator namespace as fallback).
+- [ ] Each queue's `clientConfig` resolves to a `MirrordPropertyList`, looked up in the target's namespace first, then the operator's namespace (operator **3.191.0+**) — or, as a final legacy fallback, a `MirrordKafkaClientConfig` of that name in the operator namespace.
 - [ ] mirrord.json `target` matches the `MirrordSplitConfig` `targetRef`.
 - [ ] `jq_filter` is only used with `librdkafka` (not with `mirrord.client_implementation: java`).
 
@@ -276,7 +276,7 @@ Present results as:
 - Don't generate the deprecated `MirrordKafkaTopicsConsumer`/`MirrordKafkaClientConfig` for a new setup — use `MirrordSplitConfig` + `MirrordPropertyList`.
 - Don't hallucinate CRD fields — use only fields from the reference files.
 - Don't set `group.id` — mirrord manages it.
-- Don't put a `MirrordPropertyList` in the operator namespace (that's the legacy model; the new one lives in the target's namespace).
+- Don't default a `MirrordPropertyList` to the operator's namespace — the target's namespace is still the recommended default; only use the operator's namespace (operator **3.191.0+**) when the user wants to share one connection config across namespaces.
 - Don't set both `appConfig.groupId` and `appConfig.appId` on one queue.
 - Don't offer `jq_filter` for Kafka Streams (Java client) sessions — it's librdkafka-only.
 - Don't say body/content filtering is unsupported — `jq_filter` supports it.

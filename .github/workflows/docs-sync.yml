@@ -70,8 +70,8 @@ jobs:
           prompt: "Read .github/docs-sync-prompt.md and follow its instructions exactly."
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 80
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git diff:*),Bash(git log:*),Bash(ls:*)"
+            --max-turns 250
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git diff:*),Bash(git log:*),Bash(ls:*),Bash(cat:*),Bash(head:*),Bash(wc:*)"
 
       # The enterprise blocks GITHUB_TOKEN from creating pull requests, so
       # gh pr create authenticates as the Cubby app instead (same pattern as

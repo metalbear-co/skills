@@ -4,7 +4,7 @@ The **current** resource for the operator's Kafka client connection (replaces th
 
 **API Version:** `mirrord.metalbear.co/v1`
 **Kind:** `MirrordPropertyList`
-**Namespace:** the **same namespace as the target workload** and its `MirrordSplitConfig` (this differs from the deprecated `MirrordKafkaClientConfig`, which lived in the operator's namespace).
+**Namespace:** looked up in two places, in order: (1) the **target workload's namespace** (also the namespace of its `MirrordSplitConfig`) — the recommended default, and it wins if a list of the same name also exists in the operator's namespace; (2) the **operator's own namespace**, as a fallback that lets one connection config be shared across many teams/namespaces (requires operator **3.191.0+**; earlier operators only look in the target's namespace). ConfigMap/Secret refs inside a property list resolve in whichever namespace the list itself was found in. A property list in the target's namespace that the operator can't parse fails the session outright — it does not fall through to the operator's namespace. This lookup is unrelated to the deprecated `MirrordKafkaClientConfig`, which only ever lived in the operator's namespace.
 
 ## spec
 
@@ -30,9 +30,15 @@ Consumed by the operator, not forwarded to the Kafka client:
 
 > **Do not set `group.id`.** The consumer group used by the operator's own client is managed by mirrord.
 
-## Fallback to the legacy resource
+## Namespace lookup order and legacy fallback
 
-If no `MirrordPropertyList` with the referenced `clientConfig` name exists in the target's namespace, the operator falls back to a legacy `MirrordKafkaClientConfig` of the same name in the operator's namespace. This keeps older setups working while you migrate.
+The operator resolves a `clientConfig` name in this order:
+
+1. A `MirrordPropertyList` in the target's namespace.
+2. A `MirrordPropertyList` in the operator's namespace (operator **3.191.0+**) — for sharing one connection config across namespaces.
+3. A legacy `MirrordKafkaClientConfig` of the same name in the operator's namespace, if no `MirrordPropertyList` was found in either namespace above.
+
+This keeps older setups working while you migrate.
 
 ## Common properties
 

@@ -3,7 +3,7 @@ name: mirrord-ci
 description: Help users set up mirrord in CI pipelines for testing against real Kubernetes environments. Use when users want to run end-to-end tests, integration tests, or automated tests in CI using mirrord to connect to staging/shared clusters.
 metadata:
   author: MetalBear
-  version: "1.2"
+  version: "1.3"
 ---
 
 # Mirrord CI Skill

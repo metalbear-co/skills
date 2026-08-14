@@ -127,6 +127,24 @@ MongoDB uses JSON-based filter syntax, not SQL. Filters must be valid MongoDB qu
 
 `migrations` requires the branch `name` to be set and is only available for MySQL, MariaDB, PostgreSQL, and MSSQL. A migration that conflicts with one already applied to the branch fails your session only; the branch stays usable.
 
+## `container` migration fails: connection variables can't be redirected
+
+`flavor: container` migration Jobs automatically inherit the target container's `env`/`envFrom`, and the operator redirects the branch's `connection` variables inside that inherited environment so the migration lands on the branch. This fails if the `connection` is declared via a `secret` or `gcp_secret_manager` source **without `env_var_name` set** — the operator then has no variable name to redirect, so it fails the migration rather than silently running it against the source connection.
+
+**Solution:** Set `env_var_name` on that connection source, e.g.:
+
+```json
+{
+  "connection": {
+    "params": {
+      "password": { "secret": "rds-credentials", "key": "password", "env_var_name": "DB_PASSWORD" }
+    }
+  }
+}
+```
+
+Alternatively, ask the cluster admin to disable `migrationEnv.inherit` on the operator's Helm values for that database type — this is an operator/Helm-side setting (see the mirrord-operator skill for details), not something set in `mirrord.json`.
+
 ## Generic branch never becomes ready
 
 A plain TCP readiness probe can pass before the service is actually usable (e.g. before first-boot setup completes).
