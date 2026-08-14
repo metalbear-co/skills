@@ -86,7 +86,7 @@ Raise resources if the cluster is large (defaults suit ~200 concurrent sessions)
 ```yaml
 operator:
   requests: { cpu: 100m, memory: 100Mi }
-  limits:   { cpu: 200m, memory: 200Mi }   # increase for more sessions
+  limits:   { cpu: 500m, memory: 200Mi }   # increase for more sessions
 ```
 
 ## Port 443 conflict or unavailable

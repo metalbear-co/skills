@@ -69,12 +69,14 @@ Generate the key in the dashboard (**Settings**, [app.metalbear.com](https://app
 | `image` | `ghcr.io/metalbear-co/operator` | Override for internal registry. |
 | `replicas` | `1` | Leader + standby replicas for HA. |
 | `port` | `443` | Change to `3000`/`8443` if 443 is restricted; ensure node reachability. Binds `[::]` with `0.0.0.0` fallback. |
-| `requests` / `limits` | `100m/100Mi` · `200m/200Mi` | ~200 concurrent sessions at defaults; raise for more. |
+| `requests` / `limits` | `100m/100Mi` · `500m/200Mi` | ~200 concurrent sessions at defaults; raise for more. |
 | `clusterName` | unset | Friendly cluster label in telemetry / license server. |
 | `logLevel` | `mirrord=info,operator=info,kube_runtime=warn` | stdout log filter. |
 | `jsonLog` | `false` | JSON stdout logs. |
 | `otelLogExportUrl` / `otelTraceExportUrl` / `otelLogLevel` | unset | OTel export (independent of stdout). As of operator `3.186.0`, both URLs may reference vars set in `operator.extraEnv` via `$(VAR_NAME)` syntax. |
-| `maxSessionTimeSeconds` | unset | Cap session lifetime. |
+| `sessionSetupDeadlineSeconds` | `180` | How long a session may wait for its first client connection (the "starting up" phase — e.g. while queue splitting waits for target pods to roll) before it's closed. Requires operator/chart `3.191.0`+. |
+| `sessionUnusedTtlSeconds` | `30` | How long a session may sit idle after its client disconnects (the "connected" phase) before it's closed. Raise for clients on slow/unreliable networks. Requires operator/chart `3.191.0`+. |
+| `maxSessionTimeSeconds` | unset | Cap on total session lifetime, spanning both phases above. The only value that can close a session someone is actively using. |
 | `noPodTargetsSessionTimeoutMillis` | `60000` | Timeout when no ready target pods. |
 | `subscribeEventBufferSize` | `2048` | `mirrord subscribe` event buffer depth. |
 | `copyTarget.useAgentImage` | `true` | Copy-target dummy container uses the agent image (has `sleep`). |
@@ -83,7 +85,7 @@ Generate the key in the dashboard (**Settings**, [app.metalbear.com](https://app
 
 ### Multi-cluster — `operator.multiCluster.*`
 
-Primary-cluster orchestration via Envoy. `enabled` (primary only), `defaultCluster` (required when enabled — where stateful ops happen), `managementOnly` (`true`), `remoteSessionTimeoutSecs` (300), `sessionTtlSecs` (60), `clusters` map. Members set `operator.multiClusterMember: true` (+ `multiClusterMemberIamGroup` for EKS IAM or `multiClusterMemberAzureGroup` for AKS Workload Identity). Per-cluster `authType`: `eks` (IAM, auto-refresh), `aks` (Workload Identity), `bearerToken` (auto-refresh), `mtls` (manual rotation). Remote-cluster credentials live in Secrets labeled `operator.metalbear.co/remote-cluster-credentials=true`.
+Primary-cluster orchestration via Envoy. `enabled` (primary only), `defaultCluster` (required when enabled — where stateful ops happen), `managementOnly` (`true`), `sessionSetupDeadlineSeconds` (180) and `sessionTtlSeconds` (60) for the multi-cluster session's setup/connected phases (the older `remoteSessionTimeoutSecs`/`sessionTtlSecs` spellings are still honored), `clusters` map. Members set `operator.multiClusterMember: true` (+ `multiClusterMemberIamGroup` for EKS IAM or `multiClusterMemberAzureGroup` for AKS Workload Identity). Per-cluster `authType`: `eks` (IAM, auto-refresh), `aks` (Workload Identity), `bearerToken` (auto-refresh), `mtls` (manual rotation). Remote-cluster credentials live in Secrets labeled `operator.metalbear.co/remote-cluster-credentials=true`.
 
 Routing: incoming traffic and queue splitting go to **all** Workload clusters (each cluster's operator filters/handles locally); env vars, file ops, DNS, outgoing traffic, and DB branching go to the **Default** cluster only. Queue splitting works for every supported queue service in multi-cluster (SQS, Kafka, RabbitMQ, GCP Pub/Sub, Azure Service Bus, Redis Pub/Sub, Temporal, BullMQ) — each Workload cluster still needs its own queue-service credentials (e.g. AWS creds with SQS permissions), independent of the multi-cluster `authType`. **Limitations:** targetless mode isn't supported (a target is required); a session only becomes multi-cluster when connecting to the Primary (connecting directly to a downstream cluster starts a regular single-cluster session there); the per-target RBAC check doesn't apply — restrict per-target access with `MirrordPolicy`/`MirrordClusterPolicy` instead.
 

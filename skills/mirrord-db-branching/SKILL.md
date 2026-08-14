@@ -3,7 +3,7 @@ name: mirrord-db-branching
 description: Helps users configure mirrord.json for database branching, enabling isolated database copies for safe development and testing. Use when the user wants to set up MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, or generic branches, configure copy modes, connection sources, schema migrations, IAM authentication, or manage database branches.
 metadata:
   author: MetalBear
-  version: "2.0"
+  version: "2.1"
 ---
 
 # Mirrord DB Branching Skill
@@ -144,6 +144,7 @@ Enable the matching Helm value on the operator chart, and meet the minimum versi
 | Google Spanner | 3.182.0 | 3.230.0 | 3.182.0 | `operator.spannerBranching: true` |
 | Generic | 3.183.0 | 3.232.0 | 3.183.0 | `operator.genericBranching: true` |
 | Schema migrations | 3.182.0 | 3.230.0 | 3.182.0 | (per engine above) |
+| Schema migrations: inherited target env (`container` flavor) | 3.191.0 | 3.238.0 | 3.191.0 | (per engine above) |
 
 ## Connection Modes
 
@@ -187,6 +188,7 @@ Any param (and, where noted, the `url`) can be sourced beyond a plain env var:
 
 - **Kubernetes Secret** (params only): `{ "secret": "rds-credentials", "key": "password", "env_var_name": "DB_PASSWORD" }`
 - **Google Secret Manager** (url or params; uses the target pod's GKE Workload Identity): url → `{ "type": "gcp_secret_manager", "secret_ref": "projects/../secrets/../versions/latest", "env_var_name": "DATABASE_URL" }`; param → `{ "gcp_secret_manager": "projects/../secrets/../versions/latest", "env_var_name": "DB_PASSWORD" }`
+  - `env_var_name` is normally optional on these two sources, but becomes **required** when the connection is used by a `container`-flavor [migration](#schema-migrations) Job — the operator needs a variable name to redirect the branch connection into the Job's inherited environment. Without it, the migration fails.
 - **Literal value** (user-supplied only): `{ "env_var_name": "DB_PASSWORD", "value": "..." }` — stored in a Secret by the CLI. Do not invent values.
 - **Composite env var** (`value_pattern`): extract one part of a packed value, e.g. `host` and `port` from `DB_SERVER=host:5432`. Capture group name follows the param name (`(?P<host>...)`), or use `(?P<value>...)` / a single unnamed group. Must contain ≥1 capture group.
 - **Multiple sources** (array): both `url` and each param accept an array. The **first** entry is used to locate/clone the source; **every** entry is rewritten to point at the branch (e.g. separate write/read URLs).
@@ -263,6 +265,10 @@ Customize `mysqldump` / `pg_dump`. Available in all copy modes. **MSSQL, MongoDB
 
 `migrations` runs your schema migrations against the branch at creation, before it becomes ready — so the branch matches the schema your working tree expects. Supported for **MySQL, MariaDB, PostgreSQL, MSSQL**. Requires the branch `name` to be set. Failure aborts the session (the app never starts against a half-migrated branch).
 
+`flavor` selects what the Job runs: `"flyway"` for versioned SQL files run through Flyway, or `"container"` to run your own image (a migration script or framework CLI baked into the image).
+
+### Flyway flavor
+
 ```json
 {
   "migrations": {
@@ -273,9 +279,26 @@ Customize `mysqldump` / `pg_dump`. Available in all copy modes. **MSSQL, MongoDB
 }
 ```
 
-- `flavor`: migration tool. Currently `flyway`.
 - `path`: local migrations directory, relative to the working directory.
 - `image`: optional runner image override (default `flyway/flyway:12`).
+
+### Container flavor
+
+```json
+{
+  "migrations": {
+    "flavor": "container",
+    "image": "registry.example.com/my-app:latest",
+    "command": ["bundle", "exec", "rake", "db:migrate"]
+  }
+}
+```
+
+- `image`: full image reference for the migration container, including the tag.
+- `command` / `args`: optional entrypoint override; when unset the image's own entrypoint runs.
+- `env`: optional extra env vars; entries override inherited values of the same name.
+
+The Job automatically inherits the target container's `env`/`envFrom`, and the operator redirects the branch's `connection` variables (e.g. `DATABASE_URL`) into that inherited environment — so most tools (a Rails `rake db:migrate`, a Django `manage.py migrate`) need no manual `env` wiring at all. Requires operator/Helm chart `3.191.0`+ and CLI `3.238.0`+; on older versions, wire the connection manually via `migrations.env` and the injected `MIRRORD_DB_*` vars instead. If a `connection` source is a `secret`/`gcp_secret_manager` without `env_var_name` set, the operator has no variable name to redirect and the migration fails — set `env_var_name` on that source, or ask the cluster admin to disable `migrationEnv.inherit` (an operator Helm setting; see the mirrord-operator skill for details).
 
 ## IAM Authentication
 
@@ -426,6 +449,7 @@ mirrord db-branches connections
 | DynamoDB `all` fails | `iam_auth` is required for `copy.mode: all` |
 | Filters silently dropped | Table/collection filters are incompatible with `"mode": "all"` |
 | `migrations` rejected | `name` must be set, and the engine must be MySQL/MariaDB/PostgreSQL/MSSQL |
+| `container` migration fails re: connection variables | A `connection` via `secret`/`gcp_secret_manager` needs `env_var_name` set so the operator can redirect it into the migration Job's environment |
 | Generic branch never ready | Use an `http_get`/`exec` readiness probe; plain TCP can pass before the service is usable |
 
 ## What to Ask (only if critical)

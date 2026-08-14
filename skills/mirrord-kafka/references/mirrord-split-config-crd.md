@@ -18,7 +18,8 @@ Detect the CRD: `kubectl get crd mirrordsplitconfigs.queues.mirrord.metalbear.co
 | `queues` | list | Yes | One or more queues consumed by the workload (see below). |
 | `clientConfigs` | object | No | Set the client config once for all queues of a kind, e.g. `clientConfigs.kafka: kafka-connection`. A per-queue `clientConfig` overrides it. |
 | `restart` | object | No | `restart.timeout` (seconds, default 60) — how long to wait for a new pod to become ready after the workload restart the split requires. |
-| `drainTimeout` | integer (seconds) | No | How long the workload stays patched after its last Kafka session ends, so a new session can reuse the split without another restart and the workload can finish reading the temporary topic. See [Drain timeout](#drain-timeout). |
+| `ttl` | integer (seconds) | No | Idle window after the last Kafka session ends during which the split stays fully live, so a reconnecting session resumes **instantly** with no restart. `0`/unset skips straight to the drain window. Requires operator **3.194.0+** (ignored on older operators). See [Session reuse and drain](#session-reuse-and-drain). |
+| `drainTimeout` | integer (seconds) | No | Drain window that starts once the idle window (`ttl`) elapses with no reconnect: stops forwarding new messages and lets the workload finish the already-forwarded backlog, capped at this value. On operators older than 3.194.0, this field alone controls how long the workload stays patched after its last session ends. See [Session reuse and drain](#session-reuse-and-drain). |
 
 ## queues[] entry (Kafka)
 
@@ -26,7 +27,7 @@ Detect the CRD: `kubectl get crd mirrordsplitconfigs.queues.mirrord.metalbear.co
 |-------|------|----------|-------------|
 | `id` | string | Yes | Arbitrary queue ID developers reference from `feature.split_queues` in their mirrord config. Unique within the object form. |
 | `kind` | string | Yes | Must be `kafka`. |
-| `clientConfig` | string | Yes* | Name of a `MirrordPropertyList` (in the target's namespace) holding the Kafka client connection. *Optional if set via `spec.clientConfigs.kafka`. Falls back to a legacy `MirrordKafkaClientConfig` of the same name in the operator's namespace if no `MirrordPropertyList` exists. |
+| `clientConfig` | string | Yes* | Name of a `MirrordPropertyList` holding the Kafka client connection, resolved in the target's namespace first, then the operator's namespace (operator **3.191.0+**, for sharing one config across namespaces). *Optional if set via `spec.clientConfigs.kafka`. Falls back to a legacy `MirrordKafkaClientConfig` of the same name in the operator's namespace if no `MirrordPropertyList` exists in either namespace. |
 | `appConfig.topic` | list | Yes | How the app discovers the topic name (see [appConfig sources](#appconfig-sources)). |
 | `appConfig.groupId` | list | one of groupId/appId | How the app discovers the consumer **group id**. Standard consumers. The operator's forwarder joins this group; the consumer env is left untouched. |
 | `appConfig.appId` | list | one of groupId/appId | How the app discovers the Kafka **Streams application id**. The operator patches this var to a fresh app id. Requires the Java client (`mirrord.client_implementation: java`). |
@@ -48,20 +49,21 @@ Each `appConfig.topic` / `groupId` / `appId` is a list of source entries. Fields
 
 **Env var readability:** the operator can only read a consumer's env vars if they are either (1) defined directly in the pod template via `value` or `valueFrom` (configMapKeyRef), or (2) loaded from ConfigMaps via `envFrom`. Vault-injected env vars are not readable.
 
-## Drain timeout
+## Session reuse and drain
 
-| Setting | Unit | Scope | Effect |
-|---------|------|-------|--------|
-| `spec.drainTimeout` on the `MirrordSplitConfig` | seconds | one split | Wins over the cluster default. |
-| `operator.kafkaSplittingDrainTimeout` Helm value | milliseconds | whole cluster | Default, used only when a config omits `drainTimeout`. |
+When the **last** Kafka session on a workload ends, the operator does not tear the split down right away. Two sequential windows run first, before the temporary queues are deleted and the workload is unpatched:
 
-| `drainTimeout` value | Behavior |
-|------|----------|
-| unset (both) | Unpatch as soon as the last session ends (same as `0`). Unread messages on the temporary topic are lost. |
-| `0` | Unpatch immediately; unread temporary-topic messages lost. |
-| `N` | Stay patched up to `N` seconds so a new session reuses the split, then unpatch. |
+1. **Idle window — `spec.ttl`.** The split stays fully live: the operator keeps forwarding the original topic into the temporary topic the patched workload reads. A session that reconnects during this window reuses the split **instantly**, with no restart.
+2. **Drain window — `spec.drainTimeout`.** Starts once the idle window elapses with no reconnect. The operator stops forwarding new messages and lets the patched workload finish consuming what's already in the temporary topic. A session that reconnects during this window resumes forwarding instead of rebuilding from scratch. Ends **early** once the temporary topic is fully drained, capped at `drainTimeout`.
 
-> The legacy `operator.idleKafkaSplitTtlMillis` (`OPERATOR_KAFKA_SPLITTING_TTL`) only affects legacy `MirrordKafkaTopicsConsumer` objects. With `MirrordSplitConfig`, use `spec.drainTimeout`.
+| Field | Phase | Effect |
+|-------|-------|--------|
+| `spec.ttl` | Idle | `N`: keep the split warm for up to `N` seconds so a reconnecting session resumes instantly. `0`/unset: skip straight to the drain window when the last session ends. |
+| `spec.drainTimeout` | Drain | `N`: let the workload finish the backlog for up to `N` seconds, ending early once drained. `0`: unpatch immediately — unread temporary-topic messages are lost. Unset: no cap, wait until the backlog is fully consumed. |
+
+> **Version requirement:** `spec.ttl`, and draining the temporary topic before unpatch (capped by `spec.drainTimeout`), require mirrord operator **3.194.0+**. On earlier operators, `spec.drainTimeout` alone controls how long the workload stays patched after the last session ends — the old single-field behavior.
+
+> The legacy `operator.idleKafkaSplitTtlMillis` (`OPERATOR_KAFKA_SPLITTING_TTL`) Helm value only affects legacy `MirrordKafkaTopicsConsumer` objects that leave `spec.splitTtl` unset. It is **not** a cluster-wide default for `MirrordSplitConfig`, and there is no cluster-wide equivalent — set `spec.ttl`/`spec.drainTimeout` per config instead.
 
 ## Full example (standard consumer)
 
@@ -124,4 +126,4 @@ spec:
 | `topics[].applicationIdSources` | `appConfig.appId[]` |
 | `topics[].clientConfig` (a `MirrordKafkaClientConfig`) | `spec.queues[].clientConfig` (a `MirrordPropertyList` in the target namespace, or the same legacy name as a fallback) |
 | `consumerRestartTimeout` | `spec.restart.timeout` |
-| `splitTtl` | `spec.drainTimeout` |
+| `splitTtl` | `spec.ttl` |
