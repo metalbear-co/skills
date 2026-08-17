@@ -289,6 +289,46 @@ operator:
     # deletes its child sessions on every cluster, so this must outlast setup.
     # sessionSetupDeadlineSeconds: 180
 
+    # Preview environment behavior across the fleet.
+    preview:
+      # Where a preview's pods run.
+      #
+      #   default-cluster (default) - pods on the DEFAULT cluster only
+      #   replicas                  - a full replica on EVERY workload cluster: own pods,
+      #                               own local HTTP steal, own local queue split
+      #
+      # Queue-splitting previews apply their splits on every cluster in BOTH modes - so
+      # matched messages from anywhere keep reaching the preview either way; the modes only
+      # differ in where pods run.
+      #
+      # Use `replicas` when:
+      #   - previews must catch baggage-tagged HTTP arriving through your load balancer,
+      #     which can land on ANY cluster - with default-cluster, matched requests landing
+      #     on other clusters are served by the deployed app instead of the preview
+      #   - previews should survive a cluster outage (the LB fails over onto replicas
+      #     that already exist and are already serving)
+      # Stay on `default-cluster` when:
+      #   - previews are exercised via their share link or requests you steer yourself -
+      #     that traffic enters one cluster anyway, so extra replicas would sit unused
+      #   - queue splitting is the main feature (its coverage is identical either way)
+      #   - you want the smallest footprint: one pod, no DB tunnel
+      mode: default-cluster
+
+      # Max concurrent branch-DB connections one workload cluster's replicas may hold open
+      # through the branch tunnel. Only applies with `mode: replicas` AND database branching:
+      # replicas on non-default clusters reach branch DBs over the tunnel, and each live
+      # connection holds one stream plus one port-forward on the default cluster's apiserver.
+      #
+      # This caps CONNECTIONS, never previews or branches. Size it as
+      #   concurrently running branching previews x their app's DB pool size
+      # (an idle preview holds none - its pods, and so its connections, are gone). Excess
+      # opens are rejected and surface as DB connect failures the drivers retry.
+      #
+      # The default suits roughly 25-50 concurrently connected replicas per cluster with
+      # typical pool sizes. Raising it trades more concurrent port-forwards on the default
+      # cluster's apiserver.
+      maxTunnelStreams: 256
+
     # Remote cluster configuration
     #
     # Each cluster requires `authType` to specify how it authenticates:
@@ -1061,6 +1101,10 @@ cloud:
     ## via Application Default Credentials, like `license.gsmRef` (see `.sa.gcpSa`).
     # gsmRef: "projects/PROJECT_ID/secrets/SECRET_NAME/versions/SECRET_VERSION"
     gsmRef: ""
+
+  ## When true, the operator keeps sending only anonymized telemetry to the mirrord cloud even
+  ## when its cloud API key carries identity consent.
+  anonymizeData: false
 
 service:
   name: mirrord-operator
