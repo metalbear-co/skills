@@ -1263,15 +1263,13 @@ Other ports will *not* be stolen, unless listed in
 
 Set to [80, 8080] by default.
 
-#### feature.network.incoming.tls_delivery {#feature-network-incoming-tls_delivery}
+#### feature.network.incoming.https_delivery {#feature-network-incoming-https_delivery}
 
 (Operator Only): configures how mirrord delivers stolen HTTPS requests
 to the local application.
 
 Stolen HTTPS requests can be delivered to the local application either as HTTPS or as plain HTTP
 requests. Note that stealing HTTPS requests requires mirrord Operator support.
-
-The older `feature.network.incoming.https_delivery` option is deprecated in favor of `tls_delivery`.
 
 To have the stolen HTTPS requests delivered with plain HTTP, use:
 
@@ -1330,7 +1328,7 @@ If you don't supply the server name:
    used;
 4. Otherwise, `localhost` will be used.
 
-##### feature.network.incoming.tls_delivery.protocol {#feature-network-incoming-tls_delivery-protocol}
+##### feature.network.incoming.https_delivery.protocol {#feature-network-incoming-https_delivery-protocol}
 
 Protocol to use when delivering the HTTPS requests locally.
 
@@ -1341,13 +1339,13 @@ server.
 This file must contain at least one certificate.
 It can contain entries of other types, e.g private keys, which are ignored.
 
-##### feature.network.incoming.tls_delivery.server_name {#feature-network-incoming-tls_delivery-server_name}
+##### feature.network.incoming.https_delivery.server_name {#feature-network-incoming-https_delivery-server_name}
 
 Server name to use when making a connection.
 
 Must be a valid DNS name or an IP address.
 
-##### feature.network.incoming.tls_delivery.trust_roots {#feature-network-incoming-tls_delivery-trust_roots}
+##### feature.network.incoming.https_delivery.trust_roots {#feature-network-incoming-https_delivery-trust_roots}
 
 Paths to PEM files and directories with PEM files containing allowed root certificates.
 
@@ -1715,14 +1713,11 @@ The simplified configuration supports:
 - `cronjob/{cronjob-name}[/container/{container-name}]`;
 - `statefulset/{statefulset-name}[/container/{container-name}]`;
 - `service/{service-name}[/container/{container-name}]`;
-- `replicaset/{replicaset-name}[/container/{container-name}]`;
-- `label/{key}={value}[,{key2}={value2}...][/container/{container-name}]`;
 
 Please note that:
 
-- `job`, `cronjob`, `statefulset`, `service` and `label` targets require the mirrord Operator
+- `job`, `cronjob`, `statefulset` and `service` targets require the mirrord Operator
 - `job` and `cronjob` targets require the [`copy_target`](#feature-copy_target) feature
-- `label` targets additionally require mirrord Operator v3.192.0+ and mirrord CLI v3.246.0+
 
 Shortened setup with a target:
 
@@ -1762,18 +1757,6 @@ Complete setup with a target container:
 
 The setup above will result in a session targeting the `bear-pod-container` container
 in the `bear-pod` Kubernetes pod in the `bear-pod-namespace` namespace.
-
-Shortened setup with a label target:
-
-```json
-{
-  "target": "label/app=web,tier=frontend"
-}
-```
-
-The setup above will result in a session targeting every pod in the user's default
-namespace that has both the `app: web` and `tier: frontend` labels. Requires the
-mirrord Operator (v3.192.0+) and mirrord CLI v3.246.0+.
 
 Setup with a namespace for a targetless run:
 
@@ -1820,8 +1803,6 @@ Supports:
   Operator)
 - `service/{service-name}[/container/{container-name}]`; (requires mirrord Operator)
 - `replicaset/{replicaset-name}[/container/{container-name}]`; (requires mirrord Operator)
-- `label/{key}={value}[,{key2}={value2}...][/container/{container-name}]`; (requires
-  mirrord Operator v3.192.0+ and mirrord CLI v3.246.0+)
 
 ## telemetry {#root-telemetry}
 Controls whether or not mirrord sends telemetry data to MetalBear cloud.
