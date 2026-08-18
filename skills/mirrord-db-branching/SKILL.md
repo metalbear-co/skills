@@ -3,7 +3,7 @@ name: mirrord-db-branching
 description: Helps users configure mirrord.json for database branching, enabling isolated database copies for safe development and testing. Use when the user wants to set up MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, or generic branches, configure copy modes, connection sources, schema migrations, IAM authentication, or manage database branches.
 metadata:
   author: MetalBear
-  version: "2.1"
+  version: "2.2"
 ---
 
 # Mirrord DB Branching Skill
@@ -145,6 +145,34 @@ Enable the matching Helm value on the operator chart, and meet the minimum versi
 | Generic | 3.183.0 | 3.232.0 | 3.183.0 | `operator.genericBranching: true` |
 | Schema migrations | 3.182.0 | 3.230.0 | 3.182.0 | (per engine above) |
 | Schema migrations: inherited target env (`container` flavor) | 3.191.0 | 3.238.0 | 3.191.0 | (per engine above) |
+
+## Branch Storage & Resources
+
+This is cluster-admin Helm config, not something a `db_branches` config author sets — mention it when a branch is slow to create, OOMs, or needs sizing for a large database.
+
+Since operator **3.194.0**, each branch (other than local Redis, which runs on your machine) gets its own PersistentVolumeClaims by default: one for the data directory and one for staging the dump during copy, **20Gi each**, provisioned on the cluster's default StorageClass and deleted with the branch. On clusters **without** a default StorageClass, branches automatically fall back to node-local `emptyDir` volumes (1Gi data / 100Mi dump cap) — the same behavior every operator version used before 3.194.0. The default memory limit for a branch pod is **2Gi** (raised from 512Mi); bump it per engine via `<engine>BranchConfig.dbPod.resources` for heavy images.
+
+Cluster admins tune this in the operator's Helm values:
+
+```yaml
+operator:
+  dbBranching:
+    # Cluster-wide default PVC sizes, per branch.
+    databasePvcSize: "50Gi"
+    initPvcSize: "50Gi"
+  pgBranchConfig:
+    dbPod:
+      storage:
+        # "pvc" (default) or "emptyDir".
+        kind: "pvc"
+        # Unset means the cluster's default StorageClass.
+        storageClassName: "fast-ssd"
+        # Per-engine overrides of the sizes above.
+        dataSize: "100Gi"
+        initSize: "100Gi"
+```
+
+To keep an engine's branches on node-local storage instead, set `dbPod.storage.kind: "emptyDir"` — those volumes are capped by the older `operator.dbBranching.initPodVolumeLimit`/`databasePodVolumeLimit` values, which still work and (on the PVC path) size the claims when `databasePvcSize`/`initPvcSize` aren't set. Setting `storageClassName` to a class that doesn't exist fails the branch with a named error instead of hanging; an explicit `dbPod.volume`/`initVolume` still overrides the `storage` block entirely.
 
 ## Connection Modes
 
@@ -416,7 +444,7 @@ Connection must use **params mode** (URL mode is rejected; extract `host`/`port`
 }
 ```
 
-**Security & ops notes:** generic branching is off by default and lets branch creators run arbitrary images — admins gate it (`operator.genericBranching`) and can restrict images via an `allowedImages` glob list in `genericBranchConfig`. Branch pods run under the namespace default service account with **no** API token mounted. Never inline secrets into `args` (visible in the pod spec) — use `$(MIRRORD_PARAM_*)`. Heavy images (Elasticsearch, Cassandra, Couchbase) OOM at the 512Mi default; admins raise it via `dbPod.resources`.
+**Security & ops notes:** generic branching is off by default and lets branch creators run arbitrary images — admins gate it (`operator.genericBranching`) and can restrict images via an `allowedImages` glob list in `genericBranchConfig`. Branch pods run under the namespace default service account with **no** API token mounted. Never inline secrets into `args` (visible in the pod spec) — use `$(MIRRORD_PARAM_*)`. Heavy images (Elasticsearch, Cassandra, Couchbase) OOM at the 2Gi default; admins raise it via `dbPod.resources`. See [Branch Storage & Resources](#branch-storage--resources) for the storage side.
 
 ## Running & Branch Management
 
@@ -451,6 +479,7 @@ mirrord db-branches connections
 | `migrations` rejected | `name` must be set, and the engine must be MySQL/MariaDB/PostgreSQL/MSSQL |
 | `container` migration fails re: connection variables | A `connection` via `secret`/`gcp_secret_manager` needs `env_var_name` set so the operator can redirect it into the migration Job's environment |
 | Generic branch never ready | Use an `http_get`/`exec` readiness probe; plain TCP can pass before the service is usable |
+| Branch creation slow / storage-related failure | Since operator 3.194.0 branches use per-branch PVCs by default (20Gi); an admin can tune sizes/`storageClassName` — see [Branch Storage & Resources](#branch-storage--resources) |
 
 ## What to Ask (only if critical)
 

@@ -7,7 +7,7 @@ description: >
   or managing multiple mirrord sessions' lifecycle in one command.
 metadata:
   author: MetalBear
-  version: "1.2"
+  version: "1.3"
 ---
 
 # mirrord up Skill
@@ -113,6 +113,35 @@ services:
 
 > **Warning (from the docs):** `replace` scales the deployed workload down to zero while the session runs, so *everyone* hitting that service reaches the local process — not just the developer running `mirrord up`. Prefer `split` on shared clusters.
 
+### Context
+
+`mirrord up` can run each service against a different Kubernetes context. Set it via the `--context` flag, or `context` in the config file (`common.context` for all services, `services.*.context` to override a specific one).
+
+```yaml
+common:
+  context: kind
+services:
+  user-auth-service:
+    context: minikube
+    run:
+      command: ["python", "-m", "http.server"]
+
+  stage-user-dashboard-app:
+    target:
+      path: pod/nginx
+    run:
+      command: ["node", "app.js"]
+```
+
+Precedence — `--context` (if passed) wins over every config-file setting, then the service's own `context`, then `common.context`, then the current kube context:
+
+| common context | service context | `--context` | context used |
+|-----------------|-----------------|-------------|---------------------------|
+| any | any | set | `--context` |
+| any | set | unset | service context |
+| set | unset | unset | common context |
+| unset | unset | unset | default (current context) |
+
 ### `common`
 
 Applied to all services. Currently supported (map 1:1 to `mirrord.json` root options):
@@ -120,6 +149,7 @@ Applied to all services. Currently supported (map 1:1 to `mirrord.json` root opt
 - `accept_invalid_certificates`
 - `operator`
 - `telemetry`
+- `context` (see [Context](#context) above)
 
 ### `services`
 
@@ -172,6 +202,10 @@ Maps to `feature.network.incoming.http_filter`. Only applies in `split` mode —
 #### `services.*.ignore_ports`
 
 Maps to `feature.network.incoming.ignore_ports`.
+
+#### `services.*.context`
+
+The Kubernetes context to run this service in. See [Context](#context) above for precedence rules against `common.context` and `--context`.
 
 ### Queue Splitting
 
@@ -232,6 +266,7 @@ Here `DEV_NAMESPACE` falls back to `default` when unset, while a missing `API_TO
 | `mirrord up` | Start all services from `mirrord-up.yaml` (default file name) |
 | `-f`, `--config-file` | Alternate config path (default `mirrord-up.yaml`) |
 | `--key` | Session key for `{{ key }}` / default filter; if omitted, OS username is used (also `MIRRORD_KEY`) |
+| `--context` | Kubernetes context for every service in the run, overriding each service's own `context` (see [Context](#context)) |
 | `-m`, `--mode` | `split` or `replace` — overrides `default_mode` for **every** service in the run, ignoring each service's own config-file setting |
 | `-u`, `--ui` | Start `mirrord ui` in the background |
 | `mirrord up init` | Interactive wizard; writes skeleton YAML (does **not** query the cluster) |

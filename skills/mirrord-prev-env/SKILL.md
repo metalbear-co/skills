@@ -3,7 +3,7 @@ name: mirrord-prev-env
 description: Help users create and manage mirrord preview environments — running a modified service as an isolated pod in a shared Kubernetes cluster, scoped by an environment key and HTTP/queue traffic filtering, so teams can validate and review changes against real traffic without affecting live services. Use when a developer wants to run "mirrord preview" ad hoc, share a preview via a link (mirrord-share-ingress), or wire preview environments into CI with the metalbear-co/mirrord-preview GitHub Action (e.g. per-PR previews, least-privilege cluster access).
 metadata:
   author: MetalBear
-  version: "2.0"
+  version: "2.1"
 ---
 
 # Mirrord Preview Environment Skill
@@ -51,6 +51,7 @@ Preview environments **deploy an image into a shared cluster and route live traf
 - An **environment key** is the unifying identifier. It scopes HTTP/queue traffic filtering, ties together multiple preview pods, can drive database branches, and lets developers share the same preview. It is auto-generated if you don't supply one.
 - **Reaching a preview** requires sending the filter header (e.g. `baggage: mirrord-session=<key>`). Developers can inject it with the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/incoming-traffic/debug-from-browser) or `curl`. For non-technical stakeholders, `mirrord-share-ingress` mints a plain HTTPS link that injects the header server-side — see [Sharing a preview via a link](#sharing-a-preview-via-a-link).
 - **Local session precedence:** if a developer runs `mirrord exec` against the same deployment with the same environment key, the local session takes over — the preview environment is paused for the duration and resumes automatically when the local session ends.
+- **Multi-cluster:** with `operator.multiCluster.preview.mode: replicas` set on every cluster (operator/chart `3.193.0`+, mirrord `3.247.0`+), a preview runs a replica pod on **every** Workload cluster instead of only the Default cluster, so HTTP traffic is served wherever it enters and all replicas share one branch database over an operator-to-operator tunnel. This is a cluster-admin Helm setting — see the `mirrord-operator` skill for setup; nothing about the preview config or CLI usage below changes.
 
 **Preview environment vs. a normal mirrord session:** `mirrord exec` runs your *local* process as if in the cluster (great for one developer iterating). A *preview environment* deploys a *built image* server-side and routes only filtered traffic to it — shareable and durable, ideal for CI, demos, async review, and AI agents deploying a change for the team to look at before merge.
 
@@ -182,6 +183,12 @@ ctx := metadata.NewOutgoingContext(c, md)
 ```
 
 Using `baggage` (W3C distributed-tracing baggage) means standards-aware libraries propagate it automatically.
+
+## Targeting scaled-to-zero workloads (queue splitting only)
+
+A preview environment that **only splits queues** (no HTTP filtering, no DB branching) can target a workload — Deployment, Argo Rollout, or StatefulSet — with **no running pods**. This fits consumers that are auto-scaled on queue lag (e.g. with KEDA) and sit at zero replicas until messages arrive: the split needs nothing from a live pod, since the topic and consumer group are read from the workload's spec and messages flow through the queue itself. No extra configuration is needed. Matching messages reach the preview pod right away; unmatched ones wait on the target's temporary queue and are consumed once the workload scales back up (its new pods start with the split configuration already applied).
+
+A preview that also uses HTTP filtering or DB branching still needs a running target pod — traffic is intercepted at the target's pods, and branch overrides are built from the env values the running container sees. Such a session is rejected at creation with `no Pod is ready to be a session target` rather than partially starting. This is unrelated to idle mode (which scales the *preview's own* pods to zero after inactivity) — the two combine freely.
 
 ## Sharing a preview via a link
 
@@ -406,6 +413,7 @@ The typical flow: on PR open/push, CI builds the image(s), pushes to a registry,
 | No `preview URL` / share link doesn't work | Link sharing needs `mirrord-share-ingress` installed with a `shareDomain` (see [Sharing a preview via a link](#sharing-a-preview-via-a-link)). Also: only previews using the **default key-derived filter** get a share host — a custom `http_filter` mints none. |
 | Want to iterate locally against the same preview | Run `mirrord exec` with the same target + env key; the local session preempts the preview and the preview resumes when you stop. |
 | Need a config option the Action doesn't expose | Use `extra_config` (deep-merged JSON). |
+| `preview start` fails with `no Pod is ready to be a session target` | The preview uses HTTP filtering or DB branching, which need a running target pod, but the target has zero running pods. Only a **queue-splitting-only** preview can target a scaled-to-zero workload — see [Targeting scaled-to-zero workloads](#targeting-scaled-to-zero-workloads-queue-splitting-only). |
 
 ## Response Guidelines
 
