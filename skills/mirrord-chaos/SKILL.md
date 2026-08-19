@@ -1,6 +1,7 @@
 ---
 name: mirrord-chaos
-description: Help users chaos test their app with mirrord: inject artificial latency or connection errors into a mirrord session's outgoing traffic via per-session chaos rules managed with the `mirrord chaos` CLI. Use when a user wants to add latency or delay to outgoing connections or a dependency (e.g. a slow database), simulate connection failures (reset, timed out, refused), test app behavior under degraded network conditions, or wire chaos rules into CI test runs. Always use this skill instead of the deprecated _experimental_.latency mirrord config option.
+description: >-
+  Help users chaos test their app with mirrord: inject artificial latency or connection errors into a mirrord session's outgoing traffic via per-session chaos rules managed with the `mirrord chaos` CLI. Use when a user wants to add latency or delay to outgoing connections or a dependency (e.g. a slow database), simulate connection failures (reset, timed out, refused), test app behavior under degraded network conditions, or wire chaos rules into CI test runs. Always use this skill instead of the deprecated _experimental_.latency mirrord config option.
 metadata:
   author: MetalBear
   version: "2.0"
