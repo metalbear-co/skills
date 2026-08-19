@@ -3,7 +3,7 @@ name: mirrord-operator
 description: Help users install and configure the mirrord Operator for team/enterprise environments. Use when users ask about operator setup, Helm installation, cloud API key or license configuration, air-gapped/offline licensing, enabling features (queue splitting, DB branching, preview environments, multi-cluster), internal registries, OpenShift/GKE Autopilot, RBAC, or multi-user mirrord deployments.
 metadata:
   author: MetalBear
-  version: "2.5"
+  version: "2.6"
 ---
 
 # Mirrord Operator Skill
@@ -133,6 +133,7 @@ Most features are **off by default** and gated behind a Helm value under `operat
 | Generic DB branching (user-supplied images) | `operator.genericBranching: true` (⚠️ lets branch creators run arbitrary images; restrict with `genericBranchConfig.dbPod.allowedImages`) |
 | Preview environments | `operator.previewEnv: true` (+ `operator.shareIngress.shareDomain` and the `mirrord-share-ingress` chart for link sharing) |
 | Multi-cluster orchestration | `operator.multiCluster.enabled: true` on the **primary** cluster; `operator.multiClusterMember: true` on members |
+| Preview environments as multi-cluster replicas | `operator.multiCluster.preview.mode: replicas` on **every** cluster (default `default-cluster`; needs operator/chart `3.193.0`+ and mirrord `3.247.0`+) |
 | Prometheus metrics | `operator.metrics: true` |
 
 > For the specific minimum operator/CLI/chart versions each feature needs, see the corresponding feature skill (e.g. `mirrord-db-branching`, `mirrord-kafka`, `mirrord-prev-env`).

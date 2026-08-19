@@ -50,6 +50,11 @@ The deprecated `MirrordKafkaClientConfig` was scoped to the operator namespace, 
 The operator's default librdkafka consumer is incompatible with Kafka Streams' custom partition assignment; a JVM-based Kafka proxy handles it.  
 **How to enable:** set `mirrord.client_implementation: java` on the `MirrordPropertyList`, use `appConfig.appId` (not `groupId`) on the queue, and enable `operator.kafkaSplittingSidecar.enabled: true` in the Helm chart. `jq_filter` is **not** available with the Java client.
 
+## Non-Streams clients with custom group protocols (e.g. KafkaJS) — `INCONSISTENT_GROUP_PROTOCOL`
+**Status:** Resolved (operator 3.195.0+)  
+Some client libraries that are *not* Kafka Streams — KafkaJS is the common case — advertise their own partition-assignment protocol name, which the operator's librdkafka consumer can't join a group with, producing an `INCONSISTENT_GROUP_PROTOCOL` error.  
+**Fix:** set `mirrord.temporary_group_id: "true"` on the `MirrordPropertyList`. The operator then patches the workload's consumer-group env vars to a generated temporary group instead of joining the original group, so any client library works; offsets are preserved. This is distinct from the Kafka Streams fix above (which is for actual Streams apps using `appConfig.appId`).
+
 ## Ephemeral topic cleanup errors (INT-392)
 **Status:** Open — Urgent  
 Operator logs may show `UnknownTopicOrPartition` errors when trying to delete temporary topics that were already cleaned up. Can lead to split timeouts.  
@@ -76,7 +81,8 @@ All three template variables (`{{RANDOM}}`, `{{FALLBACK}}`, `{{ORIGINAL_TOPIC}}`
 | Body/payload filter needed but "only headers supported" | Outdated — use `jq_filter` (librdkafka only) | — |
 | Session timeout + `UnknownTopicOrPartition` in logs | Ephemeral topic cleanup race condition | INT-392 |
 | Producer timeout with single-replica topics | `min.insync.replicas` not copied to ephemeral topics | INT-384 |
-| `InconsistentGroupProtocol` error | Kafka Streams incompatibility (needs JVM proxy) | INT-226 |
+| `InconsistentGroupProtocol` error, Kafka Streams app | Kafka Streams incompatibility (needs JVM proxy) | INT-226 |
+| `InconsistentGroupProtocol` error, non-Streams client (e.g. KafkaJS) | Custom partition-assignment protocol — set `mirrord.temporary_group_id: "true"` | — |
 | Splitting doesn't start, env vars not found | Vault-injected config — operator can't read it | PRO-102 |
 | Auth fails with JKS credentials | librdkafka only supports PEM format | INT-165 |
 | Splitting works but permissions fail on temp topics | Strimzi ACLs need `mirrord-tmp-*` prefix rules | INT-258 |
@@ -87,4 +93,5 @@ Some features require a minimum version:
 - **≥ 3.114.0**: JVM-based Kafka proxy (Kafka Streams support), custom temp topic naming
 - **operator ≥ 3.170.0 / CLI ≥ 3.221.0**: `MirrordSplitConfig` + `MirrordPropertyList` (the current CRDs). On older operators, only the legacy CRDs exist.
 - **operator ≥ 3.183.0 / CLI ≥ 3.232.0**: `jq_filter` for Kafka (librdkafka client only).
+- **operator ≥ 3.195.0**: `mirrord.temporary_group_id` (fixes `INCONSISTENT_GROUP_PROTOCOL` for non-Streams clients like KafkaJS).
 - Always check the operator version when troubleshooting: `kubectl get deploy mirrord-operator -n mirrord -o jsonpath='{.spec.template.spec.containers[0].image}'`
