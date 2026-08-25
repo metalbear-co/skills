@@ -3,7 +3,7 @@ name: mirrord-db-branching
 description: Helps users configure mirrord.json for database branching, enabling isolated database copies for safe development and testing. Use when the user wants to set up MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, or generic branches, configure copy modes, connection sources, schema migrations, IAM authentication, or manage database branches.
 metadata:
   author: MetalBear
-  version: "2.2"
+  version: "2.3"
 ---
 
 # Mirrord DB Branching Skill
@@ -122,6 +122,7 @@ mirrord verify-config /path/to/config.json
 | `iam_auth` | mysql, mariadb, pg, dynamodb | IAM auth for AWS RDS / GCP Cloud SQL. See [IAM Authentication](#iam-authentication). |
 | `migrations` | mysql, mariadb, pg, mssql | Run schema migrations on the branch at creation. See [Schema Migrations](#schema-migrations). |
 | `connection_settings` | pg | PostgreSQL session settings applied while reading the source (e.g. for RLS). |
+| `query_params` | pg | Query parameters on the **branch** connection the app receives (e.g. `sslmode`). See [Branch Query Parameters](#branch-query-parameters-postgresql). |
 | `emulator_host` | spanner | Name of the env var mirrord sets to the emulator address (default `SPANNER_EMULATOR_HOST`). |
 | `location` | redis | `"remote"` (default) or `"local"`. |
 | `local` | redis | Local Redis runtime config (see [Redis](#redis)). |
@@ -145,6 +146,7 @@ Enable the matching Helm value on the operator chart, and meet the minimum versi
 | Generic | 3.183.0 | 3.232.0 | 3.183.0 | `operator.genericBranching: true` |
 | Schema migrations | 3.182.0 | 3.230.0 | 3.182.0 | (per engine above) |
 | Schema migrations: inherited target env (`container` flavor) | 3.191.0 | 3.238.0 | 3.191.0 | (per engine above) |
+| Branch query params (`query_params`, pg only) | 3.197.0 | 3.250.0 | 3.197.0 | `operator.pgBranching: true` |
 
 ## Branch Storage & Resources
 
@@ -220,6 +222,7 @@ Any param (and, where noted, the `url`) can be sourced beyond a plain env var:
 - **Literal value** (user-supplied only): `{ "env_var_name": "DB_PASSWORD", "value": "..." }` — stored in a Secret by the CLI. Do not invent values.
 - **Composite env var** (`value_pattern`): extract one part of a packed value, e.g. `host` and `port` from `DB_SERVER=host:5432`. Capture group name follows the param name (`(?P<host>...)`), or use `(?P<value>...)` / a single unnamed group. Must contain ≥1 capture group.
 - **Multiple sources** (array): both `url` and each param accept an array. The **first** entry is used to locate/clone the source; **every** entry is rewritten to point at the branch (e.g. separate write/read URLs).
+- **Custom params**: beyond the fixed slots, `params` accepts any key an engine needs — Google Spanner's `project`/`instance`/`database_id`, PostgreSQL's and CockroachDB's `sslmode` (for the copy connection to the source), or (for [generic branches](#generic-branches)) any key like `token`/`org`/`vhost`. Custom params support the same value sources as the fixed slots.
 
 ```json
 {
@@ -232,6 +235,24 @@ Any param (and, where noted, the `url`) can be sourced beyond a plain env var:
   }
 }
 ```
+
+### Branch Query Parameters (PostgreSQL)
+
+The connection the app receives points at the **branch** pod, not the source, so its query parameters describe the branch. `sslmode` is set automatically — `disable` for a regular branch pod, `require` when the operator's branch config enables TLS — so a source that requires `?sslmode=require` (e.g. GCP Cloud SQL) works unchanged; the branch connection drops the requirement the branch pod can't serve.
+
+To override the automatic values or add other driver parameters, set `query_params` on the branch config (sibling of `connection`, not nested under it):
+
+```json
+{
+  "type": "pg",
+  "connection": { "url": "DATABASE_URL" },
+  "query_params": { "sslmode": "disable" }
+}
+```
+
+Cluster admins can set the same overrides for everyone via `pgBranchConfig.dbPod.queryParams` in the operator Helm values, or on a branch config `profile`. Layers merge per key: mirrord's derived default, then the admin's `queryParams`, then the session's own `query_params` — each layer overrides the previous one only for the keys it sets.
+
+`query_params` only affects the branch connection; the copy connection to the source keeps the source's own parameters. Requires operator/Helm chart **3.197.0+** and CLI **3.250.0+** — on older operators, a branch that sets `query_params` (or an `sslmode` connection param) fails with a clear error instead of being silently ignored.
 
 ## Copy Modes
 
@@ -355,7 +376,7 @@ Default env vars from the target pod: `AWS_REGION`/`AWS_DEFAULT_REGION`, `AWS_AC
 
 ### GCP Cloud SQL
 
-**Requires TLS** — the connection URL must include `sslmode=require`.
+**Requires TLS** — the connection URL must include `sslmode=require`. This only applies to the **source**: the branch connection the app receives carries the branch pod's own TLS mode (`sslmode=disable` for a regular branch pod), so the app doesn't demand TLS the branch can't serve. Override that with [`query_params`](#branch-query-parameters-postgresql) if needed.
 
 ```json
 { "iam_auth": { "type": "gcp_cloud_sql" } }
@@ -470,7 +491,7 @@ mirrord db-branches connections
 |-------|----------|
 | `db_branches` ignored | It must be nested under `feature`, not at the top level |
 | Connection timeouts | Branch DBs disable SSL by default; verify the client isn't forcing SSL |
-| GCP Cloud SQL fails | Ensure the connection URL includes `sslmode=require` |
+| GCP Cloud SQL fails | Ensure the connection URL includes `sslmode=require` (source only — the branch connection is `sslmode=disable` by default, override via `query_params` if the branch itself needs TLS) |
 | Branch creation slow | `"mode": "all"` on a large DB; switch to `"schema"`/`"empty"` or filter |
 | Branch not reused | Set a matching `id` and ensure TTL (≤15 min) hasn't expired |
 | Wrong database connected | Verify the `connection` variable(s) match the app's actual env vars |

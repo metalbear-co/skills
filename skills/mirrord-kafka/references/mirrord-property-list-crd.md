@@ -28,6 +28,7 @@ Consumed by the operator, not forwarded to the Kafka client:
 | `mirrord.auth.kind` | `MSK_IAM` | Extra authentication mechanism (only supported value). See [MSK IAM](#aws-msk-iam). |
 | `mirrord.auth.aws_region` | e.g. `eu-south-1` | AWS region; required when `mirrord.auth.kind` is `MSK_IAM`. |
 | `mirrord.temporary_group_id` | `"true"` | Works around `INCONSISTENT_GROUP_PROTOCOL` errors from clients that advertise their own partition-assignment protocol (e.g. KafkaJS). Requires operator **3.195.0+**. See [KafkaJS / custom group protocols](#kafkajs--custom-group-protocols-mirrordtemporary_group_id). |
+| `mirrord.split_topic.replication_factor` | a positive number, `copy`, or `-1` | Replication factor for temporary (split) topics. Default is `1`. Requires operator **3.191.0+**. See [Temporary Topic Replication Factor](#temporary-topic-replication-factor). |
 
 > **Do not set `group.id`.** The consumer group used by the operator's own client is managed by mirrord.
 
@@ -144,6 +145,26 @@ spec:
 ```
 
 With this set, splits patch the workload's consumer-group env vars (`appConfig.groupId`) to a generated temporary group, alongside the topic rewrite. The operator keeps the original group to itself, so it never negotiates a protocol with the application's client — any client library works. Offsets are preserved: the operator keeps committing into the original group, and the workload resumes exactly where it left off when the split ends.
+
+### Temporary Topic Replication Factor (`mirrord.split_topic.replication_factor`)
+
+By default, the operator creates temporary (split) topics with a replication factor of 1. Some managed Kafka platforms enforce a minimum and reject these topics — for example, Confluent Cloud requires a factor of 3, so splitting sessions fail with a `PolicyViolation` broker error.
+
+Set `mirrord.split_topic.replication_factor` on the Kafka `MirrordPropertyList` to control the factor. Requires operator **3.191.0+**; earlier operators reject it as an unknown `mirrord.` key.
+
+```yaml
+spec:
+  properties:
+    - name: bootstrap.servers
+      value: kafka.default.svc.cluster.local:9092
+    - name: mirrord.split_topic.replication_factor
+      value: copy
+```
+
+Accepted values:
+- a positive number — used as-is for every temporary topic.
+- `copy` — copy the replication factor derived from the original topic. Recommended when temporary topics must match source topics on managed platforms like Confluent Cloud.
+- `-1` — use the broker's default replication factor.
 
 Temporary group names follow the temporary topic name format (`mirrord-tmp-...`) — if you use group ACLs, the application's credentials must be allowed to join groups with that prefix, and the operator's credentials need `DeleteGroups` for cleanup. Requires operator **3.195.0+**.
 
