@@ -32,19 +32,21 @@ Unrecoverable pod failures (e.g. `ImagePullBackOff`, `OOMKilled`) fail the branc
 
 ## Connection fails with SSL/TLS errors
 
-Branch databases disable SSL by default. If your application client is configured to require SSL, the connection will fail.
+Branch databases disable SSL by default (`sslmode=disable` for PostgreSQL). If your application client is configured to require SSL, the connection will fail.
 
-**Solution:** Configure your application to allow non-SSL connections to the branch, or stop the client from forcing SSL. (GCP Cloud SQL IAM is the exception — see below.)
+**Solution:** Configure your application to allow non-SSL connections to the branch, or stop the client from forcing SSL. For PostgreSQL, you can also set `query_params: { "sslmode": "require" }` on the branch config if the branch pod itself is configured for TLS (operator/Helm chart **3.197.0+**, CLI **3.250.0+**). (GCP Cloud SQL IAM is the exception — see below.)
 
 ## GCP Cloud SQL connection fails
 
-GCP Cloud SQL with IAM authentication requires TLS. If the connection URL doesn't include `sslmode=require`, the connection will fail.
+GCP Cloud SQL with IAM authentication requires TLS on the **source** connection. If the connection URL doesn't include `sslmode=require`, the connection to the source will fail.
 
 **Solution:** Ensure the URL includes the SSL mode parameter:
 
 ```
 postgresql://user@host:5432/dbname?sslmode=require
 ```
+
+This only applies to the source — the branch connection your app receives carries the branch pod's own TLS mode (`sslmode=disable` by default), so the app itself does not need to demand TLS. Override that with `query_params` (see above) if the branch needs it too.
 
 ## Branch is not being reused between sessions
 

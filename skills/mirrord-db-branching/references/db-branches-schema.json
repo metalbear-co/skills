@@ -886,6 +886,17 @@
                 "null"
               ]
             },
+            "query_params": {
+              "title": "feature.db_branches[].query_params (type: pg) {#feature-db_branches-pg-query_params}",
+              "description": "Query parameters set on the branch connection your application receives (not the\ncopy connection to the source). `sslmode` is derived automatically - `disable` for a\nregular branch pod, `require` when the operator's branch config enables TLS - and can\nbe overridden here, along with any other driver parameter. A cluster admin's\n`pgBranchConfig.dbPod.queryParams` (or a branch config profile's) applies first; a\nsession's own `query_params` here wins per key.\n\nRequires operator and Helm chart 3.197.0+ and mirrord CLI 3.250.0+. On older operators,\nsetting this (or an `sslmode` connection param) fails the branch instead of being\nignored.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
             "ttl_mins": {
               "description": "Branch TTL in minutes, counted from when the branch is last used. Mutually exclusive\nwith `ttl_secs`.",
               "type": [

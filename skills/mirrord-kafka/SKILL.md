@@ -12,7 +12,7 @@ description: >
   Kafka, or connecting mirrord to a Kafka cluster. This is a Team/Enterprise feature of mirrord.
 metadata:
   author: MetalBear
-  version: "2.2"
+  version: "2.3"
 ---
 
 # mirrord Kafka Splitting Configuration Skill
@@ -117,6 +117,7 @@ Rules:
 - **Default to the target workload's namespace** (same namespace as its `MirrordSplitConfig`) — this is the recommended primary location for a single team's connection config, and it wins if a list of the same name also exists in the operator's namespace. The operator (**3.191.0+**) also looks up the list in its **own namespace** as a fallback, so one connection config can be shared across many teams/namespaces — only reach for that when the user explicitly wants shared/cluster-wide credentials. ConfigMap/Secret refs inside the list resolve in whichever namespace the list itself was found in.
 - **Never set `group.id`** — mirrord manages the operator's consumer group.
 - **KafkaJS or other clients that fail with `INCONSISTENT_GROUP_PROTOCOL`:** set `mirrord.temporary_group_id: "true"` (operator **3.195.0+**). This is different from the Kafka Streams case below — it's for regular consumers whose client library advertises a custom partition-assignment protocol the operator's librdkafka consumer can't join.
+- **Managed Kafka rejects temporary topics with a `PolicyViolation` (e.g. Confluent Cloud requires replication factor 3):** set `mirrord.split_topic.replication_factor` (operator **3.191.0+**) to a positive number, `copy` (match the source topic's factor), or `-1` (broker default).
 - Use `valueFrom.secretKeyRef` for any credential (SASL password, SSL PEMs, key password).
 - For AWS MSK IAM: set `mirrord.auth.kind: MSK_IAM` + `mirrord.auth.aws_region` (auto-adds `OAUTHBEARER` + `SASL_SSL`).
 - For Kafka Streams: set `mirrord.client_implementation: java`.
@@ -269,6 +270,8 @@ Present results as:
 **"We use JKS for Kafka auth"** → JKS→PEM conversion, then `ssl.*.pem` via a Secret.
 
 **"My session fails with `INCONSISTENT_GROUP_PROTOCOL`" / "We use KafkaJS"** → set `mirrord.temporary_group_id: "true"` on the `MirrordPropertyList` (operator **3.195.0+**). The operator then patches the consumer group to a generated temporary one so it never negotiates a protocol with the app's client. Only reach for the Kafka Streams JVM-proxy setup (`appConfig.appId` + `client_implementation: java`) if the workload is an actual Kafka Streams app.
+
+**"Splitting fails with a `PolicyViolation` broker error" / "We use Confluent Cloud"** → the managed platform enforces a minimum replication factor for new topics. Set `mirrord.split_topic.replication_factor: copy` (or a number matching the platform's minimum) on the `MirrordPropertyList` (operator **3.191.0+**).
 
 **"My session times out"** → check known-issues (single-replica `min.insync.replicas`, ephemeral topic cleanup), tune `spec.restart.timeout`, check operator logs.
 

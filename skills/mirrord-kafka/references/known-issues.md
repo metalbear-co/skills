@@ -55,6 +55,11 @@ The operator's default librdkafka consumer is incompatible with Kafka Streams' c
 Some client libraries that are *not* Kafka Streams — KafkaJS is the common case — advertise their own partition-assignment protocol name, which the operator's librdkafka consumer can't join a group with, producing an `INCONSISTENT_GROUP_PROTOCOL` error.  
 **Fix:** set `mirrord.temporary_group_id: "true"` on the `MirrordPropertyList`. The operator then patches the workload's consumer-group env vars to a generated temporary group instead of joining the original group, so any client library works; offsets are preserved. This is distinct from the Kafka Streams fix above (which is for actual Streams apps using `appConfig.appId`).
 
+## Managed Kafka rejects temporary topics with `PolicyViolation`
+**Status:** Resolved (operator 3.191.0+)  
+Some managed Kafka platforms enforce a minimum replication factor for new topics — Confluent Cloud requires 3 — and reject the operator's default factor-1 temporary topics with a `PolicyViolation` broker error.  
+**Fix:** set `mirrord.split_topic.replication_factor` on the `MirrordPropertyList` — a positive number, `copy` (match the source topic's factor, recommended for Confluent Cloud), or `-1` (broker default).
+
 ## Ephemeral topic cleanup errors (INT-392)
 **Status:** Open — Urgent  
 Operator logs may show `UnknownTopicOrPartition` errors when trying to delete temporary topics that were already cleaned up. Can lead to split timeouts.  
@@ -86,6 +91,7 @@ All three template variables (`{{RANDOM}}`, `{{FALLBACK}}`, `{{ORIGINAL_TOPIC}}`
 | Splitting doesn't start, env vars not found | Vault-injected config — operator can't read it | PRO-102 |
 | Auth fails with JKS credentials | librdkafka only supports PEM format | INT-165 |
 | Splitting works but permissions fail on temp topics | Strimzi ACLs need `mirrord-tmp-*` prefix rules | INT-258 |
+| Splitting fails with `PolicyViolation` broker error (e.g. Confluent Cloud) | Managed platform enforces a minimum replication factor — set `mirrord.split_topic.replication_factor` | — |
 
 ## Operator version requirements
 
@@ -93,5 +99,6 @@ Some features require a minimum version:
 - **≥ 3.114.0**: JVM-based Kafka proxy (Kafka Streams support), custom temp topic naming
 - **operator ≥ 3.170.0 / CLI ≥ 3.221.0**: `MirrordSplitConfig` + `MirrordPropertyList` (the current CRDs). On older operators, only the legacy CRDs exist.
 - **operator ≥ 3.183.0 / CLI ≥ 3.232.0**: `jq_filter` for Kafka (librdkafka client only).
+- **operator ≥ 3.191.0**: `mirrord.split_topic.replication_factor` (control the replication factor of temporary/split topics).
 - **operator ≥ 3.195.0**: `mirrord.temporary_group_id` (fixes `INCONSISTENT_GROUP_PROTOCOL` for non-Streams clients like KafkaJS).
 - Always check the operator version when troubleshooting: `kubectl get deploy mirrord-operator -n mirrord -o jsonpath='{.spec.template.spec.containers[0].image}'`

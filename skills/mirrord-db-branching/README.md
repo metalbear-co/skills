@@ -38,7 +38,7 @@ This skill helps AI agents:
 |----------|--------|-----------------|-------|
 | MySQL | `"mysql"` | Remote | IAM auth, migrations, `dump_args` |
 | MariaDB | `"mariadb"` | Remote | IAM auth, migrations |
-| PostgreSQL | `"pg"` | Remote | IAM auth, migrations, `dump_args`, `connection_settings` |
+| PostgreSQL | `"pg"` | Remote | IAM auth, migrations, `dump_args`, `connection_settings`, `query_params` |
 | MSSQL | `"mssql"` | Remote | migrations |
 | MongoDB | `"mongodb"` | Remote | collections (no `schema` mode) |
 | Redis | `"redis"` | Remote or local | `name` = DB index |
