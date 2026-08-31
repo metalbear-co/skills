@@ -65,13 +65,24 @@ operator:
   ##   team: platform
   labels: {}
 
+  ## Custom annotations to be added to all Kubernetes resources created by this chart, except the
+  ## CustomResourceDefinitions. Those are left unannotated so that an ordering hint set here cannot
+  ## delay them past the workloads that depend on them.
+  ## For pod-specific annotations, use operator.podAnnotations instead.
+  ## GitOps tools read annotations off the resources themselves, so this is where a sync-wave or a
+  ## similar ordering hint belongs; podAnnotations never leaves the pod template.
+  ## Example:
+  ## annotations:
+  ##   argocd.argoproj.io/sync-wave: "1"
+  annotations: {}
+
   ## Optional human-friendly name for this cluster.
   ## When set, it is reported on the operator's startup telemetry events, so the cluster shows up
   ## with a recognizable label (instead of only an opaque identifier) in the license server and in
   ## the mirrord cloud. Leave unset to omit it.
   # clusterName: "staging-us-east"
 
-  jsonLog: false
+  jsonLog: true
   # Require Kubernetes front-proxy client certificates on operator API routes.
   # The operator validates the certificate chain using the front-proxy CA from the cluster's
   # extension-apiserver-authentication configmap. Disable this only for environments where
@@ -127,6 +138,8 @@ operator:
 
   # Has to be set to `true` in order to use the suspend flux controllers feature.
   suspendFluxControllers: false
+  # Has to be set to `true` in order to let the operator pause KEDA scale-in.
+  pauseKedaScaleIn: false
   # Has to be set to `true` in order to use the MySQL database branching feature.
   mysqlBranching: false
   # Has to be set to `true` in order to use the MariaDB database branching feature.
@@ -1042,6 +1055,24 @@ operator:
   ## A profile that does not set `allowedImages` inherits the default's, so with a
   ## locked default a profile only ever runs the images it lists itself.
   ##
+  ## A profile can additionally carry the whole engine setup, so a user's mirrord.json
+  ## shrinks to type/id/profile/connection:
+  ##
+  ## - `dbPod.branch` supplies branch-container defaults (image, port, command, args,
+  ##   env, readiness). A value set in the user's mirrord.json wins per field.
+  ## - `dbPod.copy` supplies a one-shot copy Job: an image you author that copies
+  ##   schema/data from the source into the branch before it turns Ready. The Job's env
+  ##   carries the same `MIRRORD_PARAM_*` vars as the branch container (the source
+  ##   connection) plus `MIRRORD_BRANCH_HOST`/`MIRRORD_BRANCH_PORT` (where to write).
+  ##   A `copy` in the user's mirrord.json wins over the profile's, and the copy runs at
+  ##   most once per branch. The copy image also goes through `allowedImages`. If your
+  ##   cluster uses NetworkPolicies, the Job (in the target's namespace) must be able to
+  ##   reach both the source database and the branch pod's IP.
+  ##
+  ## Both fields are engine-specific, so they are only honored inside a named profile -
+  ## a generic branch that uses no profile fails when the default-level `dbPod` sets
+  ## them (users wanting an empty branch would have no opt-out otherwise).
+  ##
   ## profiles:
   ##   team-search:
   ##     dbPod:
@@ -1052,6 +1083,19 @@ operator:
   ##       resources:
   ##         limits:
   ##           memory: "2Gi"
+  ##   opensearch-full:
+  ##     dbPod:
+  ##       allowedImages:
+  ##         - "opensearchproject/*"
+  ##         - "registry.example.com/dbtools/*"
+  ##       branch:
+  ##         image: "opensearchproject/opensearch:2.19.1"
+  ##         port: 9200
+  ##         env: { "discovery.type": "single-node" }
+  ##       copy:
+  ##         image: "registry.example.com/dbtools/opensearch-copy:1.0"
+  ##         command: ["./copy.sh"]
+  ##         args: ["--mode=all"]
 
 agent:
   ## example
@@ -1169,6 +1213,9 @@ license:
 # that token to obtain its license and make its other cloud calls over the API. It is intended to
 # replace the standalone license key as the primary credential; existing installs that set only
 # `license.*` keep working via license-key authentication.
+#
+# Not used when `license.licenseServer` is set: such an operator authenticates only against that
+# license server, never against the cloud, so the key is ignored and a license source is required.
 #
 # Provide the key through exactly one of the following:
 cloud:
