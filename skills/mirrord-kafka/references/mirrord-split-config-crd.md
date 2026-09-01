@@ -42,12 +42,39 @@ Each `appConfig.topic` / `groupId` / `appId` is a list of source entries. Fields
 |-------|-------------|
 | `env` | Exact environment variable name holding the value. |
 | `envLike` | Regex matching environment variable names (use instead of `env`). |
+| `volume` | Read the value from a file mounted from a `configMap` volume, instead of an environment variable. `volume.name` is the volume in the pod spec (other volume types are rejected), `volume.file` is the path within it (the ConfigMap data key, or the item `path` when the volume remaps keys via `items`). Requires operator **3.198.0+**. If both a `volume` source and an `env`/`envLike` source are set on the same entry, `env`/`envLike` wins and `volume` is ignored. `fallback` does not apply to `volume`, and no `containers` list is needed — the file is shared by every container that mounts the volume. See [Queue Names in Mounted Config Files](#queue-names-in-mounted-config-files) below. |
 | `fallback` | Fallback value if the variable is absent (only valid with `env`). The env var is still rewritten to point at the temporary topic. |
-| `valueSelector` | A jq expression extracting the value from the variable's value — for env vars that hold JSON rather than a plain name. |
+| `valueSelector` | A selector extracting the value from the variable's value (or the mounted file, for a `volume` source) — for values that hold JSON rather than a plain name. Supports nested keys (`.kafka.topic`) and `.[]` to iterate arrays or object values; pipes, functions, and other jq operators are **not** supported. |
 | `valuePattern` | A regex for when the name is embedded in a larger string. The capture group (named `value`, else the first group) marks the part swapped for the temporary topic; surrounding text is kept. |
-| `containers` | Limit to specific containers (optional; defaults to all non-infra containers). |
+| `containers` | Limit to specific containers (optional; defaults to all non-infra containers). Ignored for a `volume` source. |
 
 **Env var readability:** the operator can only read a consumer's env vars if they are either (1) defined directly in the pod template via `value` or `valueFrom` (configMapKeyRef), or (2) loaded from ConfigMaps via `envFrom`. Vault-injected env vars are not readable.
+
+## Queue Names in Mounted Config Files
+
+Requires operator **3.198.0+**. Useful when the consumer keeps its topic/group name in a config file (e.g. a Spring-style `application.yaml` in a centrally managed ConfigMap) instead of an environment variable:
+
+```yaml
+appConfig:
+  topic:
+    - volume:
+        name: app-config          # configMap volume in the pod spec
+        file: application.yaml
+      valueSelector: ".kafka.consumer.topic.main.name"
+  groupId:
+    - volume:
+        name: app-config
+        file: application.yaml
+      valueSelector: ".kafka.consumer.group"
+```
+
+The operator never modifies the original ConfigMap. When a split starts, it creates a labeled copy with the temporary fallback names substituted, redirects the target's volume to the copy (restarting the workload, same as an env var injection), and serves the local application a version of the file carrying its own session queue names in-flight over the mirrord session — nothing with session names is written to the cluster. Pods are restored to the original ConfigMap and the copy is deleted once the last session ends.
+
+Things to know:
+- A `valueSelector`/`valuePattern` rewrite that goes through `valueSelector` re-serializes the file, so YAML comments/formatting are lost in the **copy** (never in the original); a `valuePattern` rewrite keeps the file byte-identical outside the swapped name.
+- The local application must read the mounted path through mirrord's remote file system — a path marked local via `feature.fs` local patterns reads the local copy and never sees session queue names.
+- Reads that open the file by full path see the override; reads that go through a directory file descriptor with a relative path (`openat` after opening the directory) bypass it. Most applications open config files by full path.
+- Editing the original ConfigMap while a split is running does not update the copy — changes are picked up when the next split starts.
 
 ## Session reuse and drain
 

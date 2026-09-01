@@ -12,7 +12,7 @@ description: >
   Kafka, or connecting mirrord to a Kafka cluster. This is a Team/Enterprise feature of mirrord.
 metadata:
   author: MetalBear
-  version: "2.3"
+  version: "2.4"
 ---
 
 # mirrord Kafka Splitting Configuration Skill
@@ -138,7 +138,7 @@ spec:
     # credentials via valueFrom.secretKeyRef, MSK IAM keys, or client_implementation as needed
 ```
 
-See `references/mirrord-property-list-crd.md` for MSK IAM, SSL-via-Secret, Streams, and JKS→PEM.
+See `references/mirrord-property-list-crd.md` for MSK IAM, SSL-via-Secret, Streams, and Java KeyStore credentials (native `mirrord.ssl.*.base64` on operator 3.199.0+, JKS→PEM conversion for older operators).
 
 ### 3. Generate MirrordSplitConfig
 
@@ -174,7 +174,7 @@ spec:
             containers: [<container>]
 ```
 
-`appConfig.topic`/`groupId`/`appId` sources also support `envLike` (regex over var names), `valueSelector` (jq, for JSON-valued env vars), and `valuePattern` (regex to swap an embedded name). See the split-config reference.
+`appConfig.topic`/`groupId`/`appId` sources also support `envLike` (regex over var names), `volume` (read the name from a file mounted from a ConfigMap volume instead of an env var — requires operator **3.198.0+**; see `references/mirrord-split-config-crd.md`), `valueSelector` (a selector over nested keys / `.[]` for JSON-valued env vars — not a full jq expression, no pipes or functions), and `valuePattern` (regex to swap an embedded name). See the split-config reference.
 
 ### 4. Generate mirrord.json split_queues section
 
@@ -239,7 +239,7 @@ If the user has the mirrord-config skill, point them there for the full mirrord.
 
 ### Proactive warnings (from known-issues.md)
 - Single-replica topics → `min.insync.replicas` / `acks` workaround.
-- JKS credentials → offer conversion commands.
+- JKS credentials → operator 3.199.0+ reads Java KeyStores natively (`mirrord.ssl.*.base64`); offer PEM conversion commands only for older operators.
 - Vault-injected env vars → operator can't read them.
 - Strimzi → ACLs for `mirrord-tmp-*` topics.
 - Kafka Streams → requires the Java client + sidecar; `jq_filter` won't work.
@@ -267,7 +267,7 @@ Present results as:
 
 **"We use AWS MSK with IAM"** → `mirrord.auth.kind: MSK_IAM` + `mirrord.auth.aws_region`; annotate the operator SA with the role ARN via `sa.roleArn`.
 
-**"We use JKS for Kafka auth"** → JKS→PEM conversion, then `ssl.*.pem` via a Secret.
+**"We use JKS for Kafka auth"** → put the same `ssl.*` properties the JVM app already uses on the `MirrordPropertyList`: base64-encode the store into `mirrord.ssl.truststore.base64`/`mirrord.ssl.keystore.base64` (or point `ssl.truststore.location`/`ssl.keystore.location` at a store mounted into the **operator pod**), via a Secret. Requires operator **3.199.0+** — on older operators, fall back to JKS→PEM conversion and `ssl.*.pem` via a Secret. See `references/mirrord-property-list-crd.md`.
 
 **"My session fails with `INCONSISTENT_GROUP_PROTOCOL`" / "We use KafkaJS"** → set `mirrord.temporary_group_id: "true"` on the `MirrordPropertyList` (operator **3.195.0+**). The operator then patches the consumer group to a generated temporary one so it never negotiates a protocol with the app's client. Only reach for the Kafka Streams JVM-proxy setup (`appConfig.appId` + `client_implementation: java`) if the workload is an actual Kafka Streams app.
 

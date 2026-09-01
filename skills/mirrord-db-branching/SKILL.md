@@ -3,7 +3,7 @@ name: mirrord-db-branching
 description: Helps users configure mirrord.json for database branching, enabling isolated database copies for safe development and testing. Use when the user wants to set up MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, or generic branches, configure copy modes, connection sources, schema migrations, IAM authentication, or manage database branches.
 metadata:
   author: MetalBear
-  version: "2.3"
+  version: "2.4"
 ---
 
 # Mirrord DB Branching Skill
@@ -126,7 +126,7 @@ mirrord verify-config /path/to/config.json
 | `emulator_host` | spanner | Name of the env var mirrord sets to the emulator address (default `SPANNER_EMULATOR_HOST`). |
 | `location` | redis | `"remote"` (default) or `"local"`. |
 | `local` | redis | Local Redis runtime config (see [Redis](#redis)). |
-| `image` / `port` / `command` / `args` / `env` / `readiness` | generic | See [Generic Branches](#generic-branches). |
+| `image` / `port` / `command` / `args` / `env` / `readiness` / `copy` / `profile` | generic | See [Generic Branches](#generic-branches). |
 
 ### Version Requirements
 
@@ -218,11 +218,12 @@ Any param (and, where noted, the `url`) can be sourced beyond a plain env var:
 
 - **Kubernetes Secret** (params only): `{ "secret": "rds-credentials", "key": "password", "env_var_name": "DB_PASSWORD" }`
 - **Google Secret Manager** (url or params; uses the target pod's GKE Workload Identity): url → `{ "type": "gcp_secret_manager", "secret_ref": "projects/../secrets/../versions/latest", "env_var_name": "DATABASE_URL" }`; param → `{ "gcp_secret_manager": "projects/../secrets/../versions/latest", "env_var_name": "DB_PASSWORD" }`
-  - `env_var_name` is normally optional on these two sources, but becomes **required** when the connection is used by a `container`-flavor [migration](#schema-migrations) Job — the operator needs a variable name to redirect the branch connection into the Job's inherited environment. Without it, the migration fails.
+- **AWS Secrets Manager** (url or params; uses the target pod's service account via IRSA / EKS Pod Identity, the same way [AWS RDS IAM](#iam-authentication) works): url → `{ "type": "aws_secrets_manager", "secret_ref": "arn:aws:secretsmanager:us-east-1:123456789012:secret:db-url", "env_var_name": "DATABASE_URL" }`; param → `{ "aws_secrets_manager": "db-password", "env_var_name": "DB_PASSWORD" }`. `secret_ref` is a secret name or a full ARN; the region comes from the ARN, or from `AWS_REGION`/`AWS_DEFAULT_REGION` on the target pod for a plain name. Not supported for [generic branches](#generic-branches).
+  - `env_var_name` is normally optional on these three sources, but becomes **required** when the connection is used by a `container`-flavor [migration](#schema-migrations) Job — the operator needs a variable name to redirect the branch connection into the Job's inherited environment. Without it, the migration fails.
 - **Literal value** (user-supplied only): `{ "env_var_name": "DB_PASSWORD", "value": "..." }` — stored in a Secret by the CLI. Do not invent values.
-- **Composite env var** (`value_pattern`): extract one part of a packed value, e.g. `host` and `port` from `DB_SERVER=host:5432`. Capture group name follows the param name (`(?P<host>...)`), or use `(?P<value>...)` / a single unnamed group. Must contain ≥1 capture group.
+- **Composite env var** (`value_pattern`): extract one part of a packed value, e.g. `host` and `port` from `DB_SERVER=host:5432`. Capture group name follows the param name (`(?P<host>...)`), or use `(?P<value>...)` / a single unnamed group. Must contain ≥1 capture group. This per-name group naming (`(?P<host>...)`) only works for the fixed slots — a `value_pattern` on a **custom** param must name its group `value` (or use a plain unnamed first group).
 - **Multiple sources** (array): both `url` and each param accept an array. The **first** entry is used to locate/clone the source; **every** entry is rewritten to point at the branch (e.g. separate write/read URLs).
-- **Custom params**: beyond the fixed slots, `params` accepts any key an engine needs — Google Spanner's `project`/`instance`/`database_id`, PostgreSQL's and CockroachDB's `sslmode` (for the copy connection to the source), or (for [generic branches](#generic-branches)) any key like `token`/`org`/`vhost`. Custom params support the same value sources as the fixed slots.
+- **Custom params**: beyond the fixed slots, `params` accepts any key an engine needs — Google Spanner's `project`/`instance`/`database_id`, PostgreSQL's and CockroachDB's `sslmode` (for the copy connection to the source), or (for [generic branches](#generic-branches)) any key like `token`/`org`/`vhost`. Custom params support the same value sources as the fixed slots (see the `value_pattern` naming exception above).
 
 ```json
 {
@@ -347,11 +348,15 @@ Customize `mysqldump` / `pg_dump`. Available in all copy modes. **MSSQL, MongoDB
 - `command` / `args`: optional entrypoint override; when unset the image's own entrypoint runs.
 - `env`: optional extra env vars; entries override inherited values of the same name.
 
-The Job automatically inherits the target container's `env`/`envFrom`, and the operator redirects the branch's `connection` variables (e.g. `DATABASE_URL`) into that inherited environment — so most tools (a Rails `rake db:migrate`, a Django `manage.py migrate`) need no manual `env` wiring at all. Requires operator/Helm chart `3.191.0`+ and CLI `3.238.0`+; on older versions, wire the connection manually via `migrations.env` and the injected `MIRRORD_DB_*` vars instead. If a `connection` source is a `secret`/`gcp_secret_manager` without `env_var_name` set, the operator has no variable name to redirect and the migration fails — set `env_var_name` on that source, or ask the cluster admin to disable `migrationEnv.inherit` (an operator Helm setting; see the mirrord-operator skill for details).
+The Job automatically inherits the target container's `env`/`envFrom`, and the operator redirects the branch's `connection` variables (e.g. `DATABASE_URL`) into that inherited environment — so most tools (a Rails `rake db:migrate`, a Django `manage.py migrate`) need no manual `env` wiring at all. Requires operator/Helm chart `3.191.0`+ and CLI `3.238.0`+; on older versions, wire the connection manually via `migrations.env` and the injected `MIRRORD_DB_*` vars instead. If a `connection` source is a `secret`/`gcp_secret_manager`/`aws_secrets_manager` without `env_var_name` set, the operator has no variable name to redirect and the migration fails — set `env_var_name` on that source, or ask the cluster admin to disable `migrationEnv.inherit` (an operator Helm setting; see the mirrord-operator skill for details).
 
 ## IAM Authentication
 
 Authenticate to the **source** database with IAM instead of a password. Credentials are read from the **target pod's** environment (not your local shell). Supported for **MySQL, MariaDB, PostgreSQL** (AWS RDS + GCP Cloud SQL) and **DynamoDB** (AWS; `iam_auth` is **required** for `copy.mode: all`).
+
+### Connecting to the branch
+
+IAM only authenticates against the **real** cloud database — the branch is a plain database pod the cloud provider knows nothing about, so an IAM token is not a valid password there. For **PostgreSQL** branches, mirrord solves this by running the branch pod with trust authentication whenever `iam_auth` is set: the branch accepts whatever credentials the app already sends (IAM token included), so the app connects unchanged. This doesn't affect the source database, and branches without `iam_auth` keep regular password authentication.
 
 ### AWS RDS
 
@@ -429,21 +434,23 @@ Spawns a Redis instance on your machine and redirects the app's Redis traffic to
 
 ## Generic Branches
 
-For any stateful service mirrord has no built-in engine for (InfluxDB, Valkey, Cassandra, an internal service, …). A generic branch runs **your container image** and always starts **empty** — no copy modes, no IAM, a single redirected port. Prefer a first-class engine when one exists.
+For any stateful service mirrord has no built-in engine for (InfluxDB, Valkey, Cassandra, an internal service, …). A generic branch runs **your container image** and starts **empty by default** — no built-in copy modes, no IAM, a single redirected port. Prefer a first-class engine when one exists. When an empty branch isn't useful, add a [`copy` Job](#copying-data-into-the-branch) to populate it, or reference an admin [`profile`](#admin-profiles) that supplies one.
 
 You declare the params your service needs under `connection.params` (the fixed slots plus **any** custom key like `token`, `org`). The operator resolves each from the target pod and injects it into the branch container as `MIRRORD_PARAM_<NAME>` (Secret-backed params arrive as a `secretKeyRef`; the operator never reads the value). Reference them in `command`/`args`/`env` with Kubernetes' `$(VAR)` syntax so the branch bootstraps with the same values the app uses. Two built-ins are always available: `MIRRORD_BRANCH_ID` and (when `name` is set) `MIRRORD_DATABASE_NAME`. Use `$$(...)` for a literal `$(...)`.
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `image` | Yes | Full image reference including tag. `version` is not allowed. |
-| `port` | Yes | Port the service listens on — default readiness target and the redirected port. |
+| `image` | Unless a `profile` supplies it | Full image reference including tag. `version` is not allowed. |
+| `port` | Unless a `profile` supplies it | Port the service listens on — default readiness target and the redirected port. |
 | `command` / `args` | No | Entrypoint override; may reference `$(MIRRORD_PARAM_<NAME>)`. |
 | `env` | No | Extra env vars; same references. Keys must not start with `MIRRORD_PARAM_`. |
 | `readiness` | No | Readiness probe. Defaults to a TCP probe on `port`. |
+| `copy` | No | One-shot Job that populates the branch before it turns Ready. See [Copying Data into the Branch](#copying-data-into-the-branch). |
+| `profile` | No | Name of an admin-defined profile supplying branch defaults and/or a `copy` Job. See [Admin Profiles](#admin-profiles). |
 
 Readiness types: `{ "type": "tcp" }` (default), `{ "type": "http_get", "path": "/health", "port": 8086 }`, `{ "type": "exec", "command": ["redis-cli", "ping"] }`. Prefer a probe that proves the service is *usable*, not just that the process started.
 
-Connection must use **params mode** (URL mode is rejected; extract `host`/`port` from URL-shaped vars with `value_pattern`). `gcp_secret_manager` sources are not supported for generic branches. Declaring only a `host` param (no `port`) redirects every port on the branch pod — useful for multi-port services that derive URLs from one hostname var.
+Connection must use **params mode** (URL mode is rejected; extract `host`/`port` from URL-shaped vars with `value_pattern`). `gcp_secret_manager` and `aws_secrets_manager` sources are not supported for generic branches. Declaring only a `host` param (no `port`) redirects every port on the branch pod — useful for multi-port services that derive URLs from one hostname var.
 
 ```json
 {
@@ -465,7 +472,43 @@ Connection must use **params mode** (URL mode is rejected; extract `host`/`port`
 }
 ```
 
-**Security & ops notes:** generic branching is off by default and lets branch creators run arbitrary images — admins gate it (`operator.genericBranching`) and can restrict images via an `allowedImages` glob list in `genericBranchConfig`. Branch pods run under the namespace default service account with **no** API token mounted. Never inline secrets into `args` (visible in the pod spec) — use `$(MIRRORD_PARAM_*)`. Heavy images (Elasticsearch, Cassandra, Couchbase) OOM at the 2Gi default; admins raise it via `dbPod.resources`. See [Branch Storage & Resources](#branch-storage--resources) for the storage side.
+### Copying Data into the Branch
+
+By default a generic branch starts empty. Add a `copy` config to populate it: once the empty branch boots and its readiness probe passes, the operator runs a one-shot Job from your copy image, and the branch stays **not Ready** until the Job succeeds. What "copy" means (full data, schema only, a filtered subset) is entirely up to your image — mirrord only wires the connections and gates readiness.
+
+```json
+{
+  "copy": {
+    "image": "ghcr.io/my-org/valkey-copy:1.0",
+    "command": ["./copy.sh"],
+    "args": ["--mode=all"]
+  }
+}
+```
+
+- `copy.image` (required): full image reference for the copy Job container. Goes through the same admin `allowedImages` policy as the branch image.
+- `copy.command` / `copy.args` (optional): entrypoint override; may reference the branch container's `$(VAR)`s plus `MIRRORD_BRANCH_HOST`/`MIRRORD_BRANCH_PORT`/`MIRRORD_BRANCH_ID`/`MIRRORD_DATABASE_NAME` (the branch side to write into — the `MIRRORD_PARAM_<NAME>` vars are the **source** side to read from).
+
+Things to know: the copy runs **at most once per branch** — reusing a Ready branch by `id` never re-runs it, even with a different `copy`, so use a new `id` for a fresh copy; a non-zero exit **fails the branch**; both `creation_timeout_secs` and `ttl_secs` keep counting while the copy runs, so size them to cover it; and the copy Job needs NetworkPolicy access to both the source database and the branch pod, like migration Jobs do.
+
+### Admin Profiles
+
+A named profile in the operator's Helm config (`operator.genericBranchConfig.profiles.<name>`) can carry the branch container defaults (`image`, `port`, `command`, `args`, `env`, `readiness`) and a `copy` Job — this is usually an admin's setup work, not every developer's. Reference it with `profile` so a `mirrord.json` branch shrinks to `type`/`id`/`profile`/`connection`:
+
+```json
+{
+  "type": "generic",
+  "id": "my-opensearch-branch",
+  "profile": "opensearch-full",
+  "connection": { "params": { "...": "..." } }
+}
+```
+
+Resolution is per field, and the `mirrord.json` branch always wins: a `copy`/`image`/etc. set directly overrides the profile's value for that field. `connection` always comes from `mirrord.json` — a profile cannot supply it, since it describes *your* target. The `copy`/branch-defaults blocks are only honored inside a **named** profile — setting them at the Helm config's default level is a cluster-admin error (the default applies to every generic branch regardless of engine).
+
+The `copy`/`profile` fields need a newer operator than base generic branching support; using them against an older operator fails immediately with a clear "operator does not support" error rather than hanging.
+
+**Security & ops notes:** generic branching is off by default and lets branch creators run arbitrary images — admins gate it (`operator.genericBranching`) and can restrict images via an `allowedImages` glob list in `genericBranchConfig`, which also covers the `copy` Job's image (both run user-chosen code in the cluster). Branch pods run under the namespace default service account with **no** API token mounted. Never inline secrets into `args` (visible in the pod spec) — use `$(MIRRORD_PARAM_*)`. Heavy images (Elasticsearch, Cassandra, Couchbase) OOM at the 2Gi default; admins raise it via `dbPod.resources`. See [Branch Storage & Resources](#branch-storage--resources) for the storage side.
 
 ## Running & Branch Management
 
@@ -498,7 +541,7 @@ mirrord db-branches connections
 | DynamoDB `all` fails | `iam_auth` is required for `copy.mode: all` |
 | Filters silently dropped | Table/collection filters are incompatible with `"mode": "all"` |
 | `migrations` rejected | `name` must be set, and the engine must be MySQL/MariaDB/PostgreSQL/MSSQL |
-| `container` migration fails re: connection variables | A `connection` via `secret`/`gcp_secret_manager` needs `env_var_name` set so the operator can redirect it into the migration Job's environment |
+| `container` migration fails re: connection variables | A `connection` via `secret`/`gcp_secret_manager`/`aws_secrets_manager` needs `env_var_name` set so the operator can redirect it into the migration Job's environment |
 | Generic branch never ready | Use an `http_get`/`exec` readiness probe; plain TCP can pass before the service is usable |
 | Branch creation slow / storage-related failure | Since operator 3.194.0 branches use per-branch PVCs by default (20Gi); an admin can tune sizes/`storageClassName` — see [Branch Storage & Resources](#branch-storage--resources) |
 

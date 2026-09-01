@@ -3,7 +3,7 @@ name: mirrord-prev-env
 description: Help users create and manage mirrord preview environments — running a modified service as an isolated pod in a shared Kubernetes cluster, scoped by an environment key and HTTP/queue traffic filtering, so teams can validate and review changes against real traffic without affecting live services. Use when a developer wants to run "mirrord preview" ad hoc, share a preview via a link (mirrord-share-ingress), or wire preview environments into CI with the metalbear-co/mirrord-preview GitHub Action (e.g. per-PR previews, least-privilege cluster access).
 metadata:
   author: MetalBear
-  version: "2.1"
+  version: "2.2"
 ---
 
 # Mirrord Preview Environment Skill
@@ -186,7 +186,9 @@ Using `baggage` (W3C distributed-tracing baggage) means standards-aware librarie
 
 ## Targeting scaled-to-zero workloads (queue splitting only)
 
-A preview environment that **only splits queues** (no HTTP filtering, no DB branching) can target a workload — Deployment, Argo Rollout, or StatefulSet — with **no running pods**. This fits consumers that are auto-scaled on queue lag (e.g. with KEDA) and sit at zero replicas until messages arrive: the split needs nothing from a live pod, since the topic and consumer group are read from the workload's spec and messages flow through the queue itself. No extra configuration is needed. Matching messages reach the preview pod right away; unmatched ones wait on the target's temporary queue and are consumed once the workload scales back up (its new pods start with the split configuration already applied).
+A preview environment that **only splits queues** (no HTTP filtering, no DB branching) can target a workload — Deployment, Argo Rollout, or StatefulSet — with **no running pods**. This fits consumers that are auto-scaled on queue lag (e.g. with KEDA) and sit at zero replicas until messages arrive: the split needs nothing from a live pod, since the topic and consumer group are read from the workload's spec and messages flow through the queue itself. Matching messages reach the preview pod right away; unmatched ones wait on the target's temporary queue and are consumed once the workload scales back up (its new pods start with the split configuration already applied).
+
+**KEDA caveat:** once queues are split, the target's autoscaler triggers still watch the *original* queue — which the operator is now draining — so they see no load and can scale the target to zero, with nothing left to consume the target's temporary queue (messages are then lost when the split ends). Set `operator.pauseKedaScaleIn: true` in the operator's Helm values to have the operator keep the target at a minimum of one replica and pause KEDA's scale-in (`autoscaling.keda.sh/paused-scale-in` on the `ScaledObject`) for the duration of the split — requires operator/chart **3.199.0+**. See the `mirrord-operator` skill for Helm setup.
 
 A preview that also uses HTTP filtering or DB branching still needs a running target pod — traffic is intercepted at the target's pods, and branch overrides are built from the env values the running container sees. Such a session is rejected at creation with `no Pod is ready to be a session target` rather than partially starting. This is unrelated to idle mode (which scales the *preview's own* pods to zero after inactivity) — the two combine freely.
 
@@ -195,9 +197,9 @@ A preview that also uses HTTP filtering or DB branching still needs a running ta
 By default, reaching a preview requires injecting the `baggage: mirrord-session=<key>` header — fine for developers (via the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/incoming-traffic/debug-from-browser) or `curl`), but a non-starter for a non-technical stakeholder. **`mirrord-share-ingress`** moves that header injection to a server-side component so a plain HTTPS link works with nothing to install on the recipient's side.
 
 - Each shareable preview is reachable at its own host, `<slug>.<shareDomain>`, printed by `mirrord preview start` as the `preview URL`. The `slug` mirrors the preview's key with a random suffix (e.g. `pr-myrepo-a1b2c3`) — recognizable but unguessable. When the TTL expires the host stops resolving and falls through to a "preview not found" page that redirects to your app domain.
-- **Only previews using the default key-derived filter get a share host.** A preview that sets a custom `http_filter` is not served and no share host is minted for it.
+- **The preview URL works with any HTTP filter.** A preview with a custom `http_filter` (a path filter, a different header, composed filters) additionally routes requests carrying the share link's injected baggage header, so its own filter keeps working for regular traffic while the link always reaches the preview.
 
-**How it works:** `mirrord-share-ingress` runs as its own Deployment + Service, watches Preview Environments, matches each request's host to a live preview, injects `baggage: mirrord-session=<key>`, and forwards to that preview's target Service in-cluster. The operator's filtered steal then routes the request to the preview pod — exactly as the browser extension's header would.
+**How it works:** `mirrord-share-ingress` runs as its own Deployment + Service, watches Preview Environments, matches each request's host to a live preview, injects `baggage: mirrord-session=<key>`, and forwards to that preview's target Service in-cluster. The operator's filtered steal then routes the request to the preview pod — exactly as the browser extension's header would, matching the injected header in addition to the session's own filter.
 
 **Setup (platform/admin task).** TLS and the public-facing ingress are owned by your platform team; access control to the link is their responsibility.
 
@@ -410,7 +412,7 @@ The typical flow: on PR open/push, CI builds the image(s), pushes to a registry,
 | Preview pod never becomes "Ready" | Expected — the inserted readinessGate keeps it un-Ready so the Service doesn't route to it. Filtered traffic still reaches it via the headless service. |
 | Preview times out coming up | Increase `feature.preview.creation_timeout_secs` (CLI `--timeout`). |
 | Preview environments linger | Set a TTL; to remove now: `mirrord preview stop --key <key>`. Check live ones with `mirrord preview status`. |
-| No `preview URL` / share link doesn't work | Link sharing needs `mirrord-share-ingress` installed with a `shareDomain` (see [Sharing a preview via a link](#sharing-a-preview-via-a-link)). Also: only previews using the **default key-derived filter** get a share host — a custom `http_filter` mints none. |
+| No `preview URL` / share link doesn't work | Link sharing needs `mirrord-share-ingress` installed with a `shareDomain` (see [Sharing a preview via a link](#sharing-a-preview-via-a-link)). A share host is minted regardless of `http_filter` — a custom filter still gets a link, it just additionally routes the injected baggage header alongside its own filter. |
 | Want to iterate locally against the same preview | Run `mirrord exec` with the same target + env key; the local session preempts the preview and the preview resumes when you stop. |
 | Need a config option the Action doesn't expose | Use `extra_config` (deep-merged JSON). |
 | `preview start` fails with `no Pod is ready to be a session target` | The preview uses HTTP filtering or DB branching, which need a running target pod, but the target has zero running pods. Only a **queue-splitting-only** preview can target a scaled-to-zero workload — see [Targeting scaled-to-zero workloads](#targeting-scaled-to-zero-workloads-queue-splitting-only). |

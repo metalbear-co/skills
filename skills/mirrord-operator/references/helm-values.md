@@ -32,6 +32,8 @@ Exactly one of:
 
 Generate the key in the dashboard (**Settings**, [app.metalbear.com](https://app.metalbear.com)); shown once. Rotate/revoke from the dashboard.
 
+When generating the key, an org admin also chooses **identity sharing** (ticked by default): with it on, the usage dashboard shows developer usernames and session targets instead of hashes; with it off, usage metrics stay anonymized. Set `cloud.anonymizeData: true` to keep metrics anonymized regardless of the key's setting — this also covers legacy license keys and self-hosted License Server auth, which never send identity. A change takes effect at the operator's next cloud token refresh, no restart needed.
+
 ### License — `license.*` (deprecated for cloud auth; used for license server / offline)
 
 | Value | Notes |

@@ -50,8 +50,9 @@ Each `appConfig` field is a **list of sources**, same structure as other queue s
 | --- | --- |
 | `env` | Exact env var name holding the value. |
 | `envLike` | Regex over env var names, for when the exact name varies. |
+| `volume` | Read the value from a file mounted from a `configMap` volume (`volume.name` for the pod-spec volume, `volume.file` for the path within it), instead of an environment variable. Requires operator **3.198.0+**. `env`/`envLike` takes precedence if also set on the same entry; `fallback` and `containers` don't apply to it — the file is shared by every container that mounts the volume. The operator serves your local worker a copy of the file carrying its own session queue names, in-flight over the session; the original ConfigMap is never modified. |
 | `fallback` | Literal value used when no env var matches. |
-| `valueSelector` | jq expression, for JSON-valued env vars. |
+| `valueSelector` | A selector over nested keys and `.[]` (to iterate arrays or object values) for JSON-valued env vars — not a full jq expression; pipes and functions are not supported. |
 | `valuePattern` | Regex to swap a name embedded inside a larger value. |
 | `containers` | Container names the source applies to (omit for all containers). |
 
