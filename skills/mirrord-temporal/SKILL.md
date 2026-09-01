@@ -12,7 +12,7 @@ description: >
   feature of mirrord.
 metadata:
   author: MetalBear
-  version: "1.0"
+  version: "1.1"
 ---
 
 # mirrord Temporal Splitting Configuration Skill
@@ -150,7 +150,7 @@ Rules:
 - `spec.targetRef` = `{ apiVersion, kind, name }` (Deployment/StatefulSet/Rollout).
 - Each `spec.queues[]` needs `id`, `kind: temporal`, a `clientConfig` (the `MirrordPropertyList` name; or set once via `spec.clientConfigs.temporal`), and `appConfig.taskQueue`.
 - `appConfig.temporalAddress` (optional) names the env var holding the frontend address — the operator patches it so the worker connects to the operator's proxy. `appConfig.temporalNamespace` (optional) names the env var holding the Temporal namespace.
-- Each `appConfig` field uses the same source structure as other queue services: `env`, `envLike`, `fallback`, `valueSelector`, `valuePattern`, `containers`.
+- Each `appConfig` field uses the same source structure as other queue services: `env`, `envLike`, `volume` (read from a file mounted from a ConfigMap volume instead of an env var — operator **3.198.0+**), `fallback`, `valueSelector`, `valuePattern`, `containers`.
 - Per-queue Temporal options (`max_buffered_tasks`) live in a separate `MirrordPropertyList` referenced by the queue's `queueConfig`.
 - `spec.drainTimeout` (seconds) keeps the split's temporary resources alive after the last session ends so a new session can reuse them; unset or `0` tears down immediately. It does **not** wait for in-flight work.
 

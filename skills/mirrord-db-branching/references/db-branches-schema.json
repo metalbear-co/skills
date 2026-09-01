@@ -359,7 +359,7 @@
           ]
         },
         {
-          "description": "When branching a database, cache, or any other stateful service that mirrord has no built-in\nengine for, set `type` to `generic`.\n\nA generic branch runs the container image you supply, starting empty - there are no copy\nmodes, IAM auth, or schema handling. The operator resolves each parameter you declare under\n`connection.params` from the target pod and injects it into the branch container as an env\nvar named `MIRRORD_PARAM_<NAME>` (a Secret-backed param arrives as a `secretKeyRef`; the\noperator never reads its value). Reference these in `command`, `args`, and `env` with\nKubernetes' native `$(VAR)` syntax so the branch bootstraps itself with the *same* values the\napp already uses. mirrord then only redirects the app's `host`/`port` vars to the branch -\neverything else in the app's environment keeps working unchanged.\n\nTwo built-ins are always available alongside the params: `MIRRORD_BRANCH_ID` and, when the\nshared `name` field is set, `MIRRORD_DATABASE_NAME`.\n\n#### feature.db_branches[].image (type: generic) {#feature-db_branches-generic-image}\n\nFull image reference for the branch container, including the tag\n(e.g. `docker.io/library/influxdb:2.7`). Required. The shared `version` field is not\nallowed for generic branches - the tag lives here.\n\n#### feature.db_branches[].port (type: generic) {#feature-db_branches-generic-port}\n\nThe port the branched service listens on. Required. Used as the default readiness probe\ntarget and as the port the app's connection is redirected to.\n\n#### feature.db_branches[].command / args (type: generic) {#feature-db_branches-generic-command}\n\nOptional entrypoint override for the branch container. Values may reference declared params\nwith `$(MIRRORD_PARAM_<NAME>)`; use `$$(...)` for a literal `$(...)`. Values written\ndirectly into `args` are visible in the pod spec - reference params via `$(VAR)` instead of\ninlining secrets.\n\n#### feature.db_branches[].env (type: generic) {#feature-db_branches-generic-env}\n\nExtra environment variables for the branch container. Values support the same\n`$(MIRRORD_PARAM_<NAME>)` references as `command`/`args`. Keys must not start with\n`MIRRORD_PARAM_` or collide with the built-ins.\n\n#### feature.db_branches[].readiness (type: generic) {#feature-db_branches-generic-readiness}\n\nReadiness check for the branch container. Defaults to a TCP probe on `port`.\n\n```json\n{ \"readiness\": { \"type\": \"http_get\", \"path\": \"/health\" } }\n```\n```json\n{ \"readiness\": { \"type\": \"exec\", \"command\": [\"redis-cli\", \"ping\"] } }\n```\n\nExample - an empty InfluxDB branch, bootstrapped with the app's own token/org/bucket so the\napp's untouched credential vars stay valid against the branch:\n\n```json\n{\n  \"type\": \"generic\",\n  \"id\": \"my-influx-branch\",\n  \"image\": \"docker.io/library/influxdb:2.7\",\n  \"port\": 8086,\n  \"connection\": {\n    \"params\": {\n      \"host\": { \"env_var_name\": \"INFLUXDB_URL\", \"value_pattern\": \"https?://([^:/]+)\" },\n      \"port\": { \"env_var_name\": \"INFLUXDB_URL\", \"value_pattern\": \":([0-9]+)\" },\n      \"token\": { \"secret\": \"influx-creds\", \"key\": \"token\" },\n      \"org\": \"INFLUXDB_ORG\",\n      \"bucket\": \"INFLUXDB_BUCKET\"\n    }\n  },\n  \"env\": {\n    \"DOCKER_INFLUXDB_INIT_MODE\": \"setup\",\n    \"DOCKER_INFLUXDB_INIT_USERNAME\": \"admin\",\n    \"DOCKER_INFLUXDB_INIT_PASSWORD\": \"mirrord-branch\",\n    \"DOCKER_INFLUXDB_INIT_ADMIN_TOKEN\": \"$(MIRRORD_PARAM_TOKEN)\",\n    \"DOCKER_INFLUXDB_INIT_ORG\": \"$(MIRRORD_PARAM_ORG)\",\n    \"DOCKER_INFLUXDB_INIT_BUCKET\": \"$(MIRRORD_PARAM_BUCKET)\"\n  }\n}\n```\n\n`token`, `org`, and `bucket` are custom params - any key works under `connection.params`,\nnot just the fixed `host`/`port`/`user`/`password`/`database` slots. The connection must use\nparams mode (URL-shaped env vars are covered by `value_pattern` on `host`/`port`), and\n`gcp_secret_manager` sources are not supported for generic branches.",
+          "description": "When branching a database, cache, or any other stateful service that mirrord has no built-in\nengine for, set `type` to `generic`.\n\nA generic branch runs the container image you supply, starting empty by default - there are\nno built-in copy modes, IAM auth, or schema handling. The operator resolves each parameter you\ndeclare under `connection.params` from the target pod and injects it into the branch\ncontainer as an env var named `MIRRORD_PARAM_<NAME>` (a Secret-backed param arrives as a\n`secretKeyRef`; the operator never reads its value). Reference these in `command`, `args`,\nand `env` with Kubernetes' native `$(VAR)` syntax so the branch bootstraps itself with the\n*same* values the app already uses. mirrord then only redirects the app's `host`/`port` vars\nto the branch - everything else in the app's environment keeps working unchanged.\n\nTwo built-ins are always available alongside the params: `MIRRORD_BRANCH_ID` and, when the\nshared `name` field is set, `MIRRORD_DATABASE_NAME`.\n\n#### feature.db_branches[].image (type: generic) {#feature-db_branches-generic-image}\n\nFull image reference for the branch container, including the tag\n(e.g. `docker.io/library/influxdb:2.7`). Required unless a `profile` supplies it. The shared\n`version` field is not allowed for generic branches - the tag lives here.\n\n#### feature.db_branches[].port (type: generic) {#feature-db_branches-generic-port}\n\nThe port the branched service listens on. Required unless a `profile` supplies it. Used as\nthe default readiness probe target and as the port the app's connection is redirected to.\n\n#### feature.db_branches[].command / args (type: generic) {#feature-db_branches-generic-command}\n\nOptional entrypoint override for the branch container. Values may reference declared params\nwith `$(MIRRORD_PARAM_<NAME>)`; use `$$(...)` for a literal `$(...)`. Values written\ndirectly into `args` are visible in the pod spec - reference params via `$(VAR)` instead of\ninlining secrets.\n\n#### feature.db_branches[].env (type: generic) {#feature-db_branches-generic-env}\n\nExtra environment variables for the branch container. Values support the same\n`$(MIRRORD_PARAM_<NAME>)` references as `command`/`args`. Keys must not start with\n`MIRRORD_PARAM_` or collide with the built-ins.\n\n#### feature.db_branches[].readiness (type: generic) {#feature-db_branches-generic-readiness}\n\nReadiness check for the branch container. Defaults to a TCP probe on `port`.\n\n```json\n{ \"readiness\": { \"type\": \"http_get\", \"path\": \"/health\" } }\n```\n```json\n{ \"readiness\": { \"type\": \"exec\", \"command\": [\"redis-cli\", \"ping\"] } }\n```\n\n#### feature.db_branches[].copy (type: generic) {#feature-db_branches-generic-copy}\n\nOptional one-shot Job that copies schema and data into the empty branch before it turns\nReady - your own image, run once per branch. See `GenericBranchCopyConfig`.\n\n#### feature.db_branches[].profile (type: generic) {#feature-db_branches-generic-profile}\n\nOptional name of an admin-defined profile in the operator's generic branch config. A profile\ncan supply the branch defaults (`image`, `port`, `command`, `args`, `env`, `readiness`) and a\n`copy` Job, so a minimal config only needs `type`/`id`/`profile`/`connection`. A field set\ndirectly on this branch always overrides the profile's value for that field; `connection`\nnever comes from a profile.\n\nExample - an empty InfluxDB branch, bootstrapped with the app's own token/org/bucket so the\napp's untouched credential vars stay valid against the branch:\n\n```json\n{\n  \"type\": \"generic\",\n  \"id\": \"my-influx-branch\",\n  \"image\": \"docker.io/library/influxdb:2.7\",\n  \"port\": 8086,\n  \"connection\": {\n    \"params\": {\n      \"host\": { \"env_var_name\": \"INFLUXDB_URL\", \"value_pattern\": \"https?://([^:/]+)\" },\n      \"port\": { \"env_var_name\": \"INFLUXDB_URL\", \"value_pattern\": \":([0-9]+)\" },\n      \"token\": { \"secret\": \"influx-creds\", \"key\": \"token\" },\n      \"org\": \"INFLUXDB_ORG\",\n      \"bucket\": \"INFLUXDB_BUCKET\"\n    }\n  },\n  \"env\": {\n    \"DOCKER_INFLUXDB_INIT_MODE\": \"setup\",\n    \"DOCKER_INFLUXDB_INIT_USERNAME\": \"admin\",\n    \"DOCKER_INFLUXDB_INIT_PASSWORD\": \"mirrord-branch\",\n    \"DOCKER_INFLUXDB_INIT_ADMIN_TOKEN\": \"$(MIRRORD_PARAM_TOKEN)\",\n    \"DOCKER_INFLUXDB_INIT_ORG\": \"$(MIRRORD_PARAM_ORG)\",\n    \"DOCKER_INFLUXDB_INIT_BUCKET\": \"$(MIRRORD_PARAM_BUCKET)\"\n  }\n}\n```\n\n`token`, `org`, and `bucket` are custom params - any key works under `connection.params`,\nnot just the fixed `host`/`port`/`user`/`password`/`database` slots. The connection must use\nparams mode (URL-shaped env vars are covered by `value_pattern` on `host`/`port`), and\n`gcp_secret_manager`/`aws_secrets_manager` sources are not supported for generic branches.",
           "type": "object",
           "properties": {
             "args": {
@@ -386,6 +386,17 @@
               "description": "How to source the connection info for the source database. The operator swaps it for\nthe branch's connection once the branch is ready.",
               "$ref": "#/definitions/DbBranchingConnectionSource"
             },
+            "copy": {
+              "description": "One-shot Job that copies schema and data into the branch before it turns Ready. Only\nhonored inside a named `profile` if unset here.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GenericBranchCopyConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "creation_timeout_secs": {
               "description": "Seconds to wait for a branch to become ready after creation. Defaults to 60.",
               "type": "integer",
@@ -400,6 +411,13 @@
                 "type": "string"
               }
             },
+            "profile": {
+              "description": "Name of an admin-defined profile in the operator's generic branch config, supplying\nbranch defaults and/or a copy Job. A field set directly on this branch overrides the\nprofile's value for that field.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "id": {
               "description": "Optional stable id for reusing or sharing a branch across users.",
               "type": [
@@ -408,8 +426,11 @@
               ]
             },
             "image": {
-              "description": "Full image reference for the branch container, including the tag.",
-              "type": "string"
+              "description": "Full image reference for the branch container, including the tag. Required unless a\n`profile` supplies it.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "name": {
               "description": "Source database name, used when the operator cannot read it from the connection.",
@@ -419,8 +440,11 @@
               ]
             },
             "port": {
-              "description": "The port the branched service listens on.",
-              "type": "integer",
+              "description": "The port the branched service listens on. Required unless a `profile` supplies it.",
+              "type": [
+                "integer",
+                "null"
+              ],
               "format": "uint16",
               "maximum": 65535,
               "minimum": 0
@@ -469,9 +493,7 @@
           "additionalProperties": false,
           "required": [
             "type",
-            "connection",
-            "image",
-            "port"
+            "connection"
           ]
         },
         {
@@ -1306,6 +1328,30 @@
             "type",
             "secret_ref"
           ]
+        },
+        {
+          "description": "Fetched from AWS Secrets Manager by the branch init container using the target pod's\nservice account (IRSA / EKS Pod Identity). Same semantics as `ParamSource::AwsSecretsManager`.\n`secret_ref` is a secret name or a full ARN. Not supported for generic branches.",
+          "type": "object",
+          "properties": {
+            "env_var_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "secret_ref": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "aws_secrets_manager"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "secret_ref"
+          ]
         }
       ]
     },
@@ -1357,6 +1403,40 @@
             "mode"
           ]
         }
+      ]
+    },
+    "GenericBranchCopyConfig": {
+      "description": "<!--${internal}-->\nOne-shot Job that copies schema and data into an empty generic branch before it turns\nReady. Documented on the generic `DatabaseBranchConfig` variant.",
+      "type": "object",
+      "properties": {
+        "image": {
+          "description": "Full image reference for the copy Job container, including the tag. Goes through the\nsame admin `allowedImages` policy as the branch image.",
+          "type": "string"
+        },
+        "command": {
+          "description": "Entrypoint command override for the copy container. Values may reference the same\n`$(VAR)`s as the branch container, plus the `MIRRORD_BRANCH_*` built-ins.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "args": {
+          "description": "Entrypoint args override for the copy container.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "image"
       ]
     },
     "GenericReadinessConfig": {

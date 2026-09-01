@@ -3,7 +3,7 @@ name: mirrord-operator
 description: Help users install and configure the mirrord Operator for team/enterprise environments. Use when users ask about operator setup, Helm installation, cloud API key or license configuration, air-gapped/offline licensing, enabling features (queue splitting, DB branching, preview environments, multi-cluster), internal registries, OpenShift/GKE Autopilot, RBAC, or multi-user mirrord deployments.
 metadata:
   author: MetalBear
-  version: "2.7"
+  version: "2.8"
 ---
 
 # Mirrord Operator Skill
@@ -78,7 +78,7 @@ curl https://raw.githubusercontent.com/metalbear-co/charts/main/mirrord-operator
 
 The operator needs credentials to obtain its license. Pick **one** path:
 
-**A. Cloud API key (default, recommended).** The operator authenticates to the mirrord cloud with a **cloud API key** and obtains its license over the API. Generate the key in the dashboard under **Settings** at [app.metalbear.com](https://app.metalbear.com) — it's shown **only once**. Provide it one of three ways:
+**A. Cloud API key (default, recommended).** The operator authenticates to the mirrord cloud with a **cloud API key** and obtains its license over the API. Generate the key in the dashboard under **Settings** at [app.metalbear.com](https://app.metalbear.com) — it's shown **only once**. When generating it, an org admin also chooses **identity sharing** (ticked by default): with it on, usage metrics sent to the mirrord cloud include developer usernames and session targets so the usage dashboard can show them by name; with it off, metrics stay anonymized. Set `cloud.anonymizeData: true` in Helm values to keep metrics anonymized regardless of the key's setting. Provide the key one of three ways:
 
 - **Kubernetes Secret (recommended)** — the user creates the Secret; the key never lives in `values.yaml`. Point the chart at the secret name now (this doesn't require the secret to exist yet):
   ```yaml

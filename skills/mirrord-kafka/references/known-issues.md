@@ -18,9 +18,9 @@ When the source topic has `replication.factor=1` and `min.insync.replicas=1`, th
 **Workaround:** Add `acks: "1"` to the `MirrordPropertyList` (or legacy `MirrordKafkaClientConfig`) properties if using single-replica topics.
 
 ## Java KeyStore (JKS) not directly supported (INT-165)
-**Status:** Open — Low priority  
-The operator's Kafka client (librdkafka) only supports PEM-format credentials. Java `.jks` files must be converted first.  
-**Workaround:** Convert JKS to PEM:
+**Status:** Resolved (operator 3.199.0+)  
+The operator now loads Java KeyStores (JKS, JCEKS, PKCS#12) natively: put the same `ssl.*` properties the JVM app already uses on the `MirrordPropertyList`, plus `mirrord.ssl.truststore.base64`/`mirrord.ssl.keystore.base64` for an inline base64-encoded store (or `ssl.truststore.location`/`ssl.keystore.location` for a store mounted into the **operator pod**). See `references/mirrord-property-list-crd.md`.  
+**Workaround (older operators):** Convert JKS to PEM:
 ```sh
 # Keystore → PKCS12 → PEM
 keytool -importkeystore -srckeystore keystore.jks -srcstoretype JKS \
@@ -33,7 +33,7 @@ keytool -importkeystore -srckeystore truststore.jks -srcstoretype JKS \
   -destkeystore truststore.p12 -deststoretype PKCS12
 openssl pkcs12 -in truststore.p12 -nokeys -out ca-cert.pem
 ```
-Then use `ssl.certificate.pem`, `ssl.key.pem`, `ssl.ca.pem` in the client config.
+Then use `ssl.certificate.pem`, `ssl.key.pem`, `ssl.ca.pem` in the client config. This path (and PKCS#12 truststores, which native loading doesn't support) still applies regardless of operator version.
 
 ## Vault-injected config not supported (PRO-102)
 **Status:** Open — Triage  
@@ -89,7 +89,7 @@ All three template variables (`{{RANDOM}}`, `{{FALLBACK}}`, `{{ORIGINAL_TOPIC}}`
 | `InconsistentGroupProtocol` error, Kafka Streams app | Kafka Streams incompatibility (needs JVM proxy) | INT-226 |
 | `InconsistentGroupProtocol` error, non-Streams client (e.g. KafkaJS) | Custom partition-assignment protocol — set `mirrord.temporary_group_id: "true"` | — |
 | Splitting doesn't start, env vars not found | Vault-injected config — operator can't read it | PRO-102 |
-| Auth fails with JKS credentials | librdkafka only supports PEM format | INT-165 |
+| Auth fails with JKS credentials | Operator 3.199.0+ loads JKS/JCEKS/PKCS#12 natively via `mirrord.ssl.*`; older operators need PEM conversion | INT-165 |
 | Splitting works but permissions fail on temp topics | Strimzi ACLs need `mirrord-tmp-*` prefix rules | INT-258 |
 | Splitting fails with `PolicyViolation` broker error (e.g. Confluent Cloud) | Managed platform enforces a minimum replication factor — set `mirrord.split_topic.replication_factor` | — |
 
@@ -101,4 +101,6 @@ Some features require a minimum version:
 - **operator ≥ 3.183.0 / CLI ≥ 3.232.0**: `jq_filter` for Kafka (librdkafka client only).
 - **operator ≥ 3.191.0**: `mirrord.split_topic.replication_factor` (control the replication factor of temporary/split topics).
 - **operator ≥ 3.195.0**: `mirrord.temporary_group_id` (fixes `INCONSISTENT_GROUP_PROTOCOL` for non-Streams clients like KafkaJS).
+- **operator ≥ 3.198.0**: `appConfig.topic`/`groupId`/`appId` `volume` source (read the name from a file mounted from a ConfigMap volume instead of an env var).
+- **operator ≥ 3.199.0**: native Java KeyStore credentials (`mirrord.ssl.*` properties) — see the JKS entry above.
 - Always check the operator version when troubleshooting: `kubectl get deploy mirrord-operator -n mirrord -o jsonpath='{.spec.template.spec.containers[0].image}'`

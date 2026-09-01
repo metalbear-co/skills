@@ -7,7 +7,7 @@ Configure mirrord for isolated database branches during development. (Team / Ent
 This skill helps AI agents:
 - **Generate** valid `feature.db_branches` configs for mirrord.json
 - **Configure** MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, and Generic branches
-- **Set up** copy modes (empty, schema, all, filtered) and connection sources (env, Kubernetes Secret, Google Secret Manager, literal, composite, multiple)
+- **Set up** copy modes (empty, schema, all, filtered) and connection sources (env, Kubernetes Secret, Google Secret Manager, AWS Secrets Manager, literal, composite, multiple)
 - **Run** schema migrations against a branch (Flyway)
 - **Configure** IAM authentication for AWS RDS, GCP Cloud SQL, and DynamoDB
 - **Manage** database branches via CLI commands
