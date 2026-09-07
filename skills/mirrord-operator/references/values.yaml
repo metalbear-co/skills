@@ -129,6 +129,8 @@ operator:
   temporalSplitting: false
   # Has to be set to `true` in order to use the BullMQ queue splitting feature.
   bullmqSplitting: false
+  # Has to be set to `true` in order to use the NATS queue splitting feature.
+  natsSplitting: false
   # Temporal queue splitting proxy settings.
   temporalProxy:
     # Port for the Temporal frontend proxy workers connect to via `TEMPORAL_ADDRESS`.
@@ -239,8 +241,8 @@ operator:
   # value of the current session key into redirected HTTP requests,
   # responses to said requests, and the queue-splitting messages routed to
   # a session. For queues it uses a native metadata field where the broker
-  # has one (SQS, Google Pub/Sub, RabbitMQ, Kafka, Azure Service Bus, and
-  # Temporal activity tasks), otherwise the JSON payload (BullMQ, Redis
+  # has one (SQS, Google Pub/Sub, RabbitMQ, Kafka, Azure Service Bus, NATS,
+  # and Temporal activity tasks), otherwise the JSON payload (BullMQ, Redis
   # Pub/Sub); non-JSON payloads are left untouched.
   injectSessionKeyHeader: true
 
@@ -781,6 +783,27 @@ operator:
   ##   # password on the branch (as a salted hash); PostgreSQL never exposes other roles'
   ##   # passwords, so those restore without one.
   ##   roles: "empty"
+  ##   # Client authentication on branches whose source uses IAM auth.
+  ##   # `trust` (default): the branch accepts any credentials - IAM apps present
+  ##   # cloud-minted tokens a plain postgres branch cannot verify, and trust is what
+  ##   # lets them connect unchanged.
+  ##   # `password`: regular password auth; IAM apps must then read the branch
+  ##   # password from an env var mirrord injects (the `password` connection param).
+  ##   # Branches without `iam_auth` always use password auth.
+  ##   iamBranchAuth: "trust"
+  ##   # Extra flags for the branch's postgres server, passed as the container's args. The
+  ##   # official image's entrypoint hands them to the server, so an image that replaces that
+  ##   # entrypoint may not pick them up. Any file a flag points at (TLS certs below) must
+  ##   # exist in the image, and the entrypoint's temporary server that restores the copied
+  ##   # data runs with the same flags. Keep the listener on 5432 - the seeding init
+  ##   # container, schema migrations, and the operator all connect there.
+  ##   dbServerArgs:
+  ##     - "-c"
+  ##     - "ssl=on"
+  ##     - "-c"
+  ##     - "ssl_cert_file=/etc/ssl/certs/server.pem"
+  ##     - "-c"
+  ##     - "ssl_key_file=/etc/ssl/private/server.key"
   ##
   ## Named profiles: alternative complete baselines next to the default `dbPod` above,
   ## selected per branch with `"profile": "<name>"` in mirrord.json. A profile accepts
@@ -901,6 +924,16 @@ operator:
   ##         - "--tls-key-file"
   ##         - "/certs/tls.key"
   ##       tls: true
+  ##
+  ## Profile settings live under the profile's `dbPod` key. A key placed beside
+  ## `dbPod` (e.g. `profiles.tls-baseline.tls`) is not a valid setting, and a
+  ## branch selecting that profile fails with an error naming the misplaced key.
+  ##
+  ## For `copy.mode: all` against a source Redis that only accepts TLS, provide
+  ## the certificates via a `MirrordPropertyList` named `redis-source-tls` in the
+  ## target's namespace - not via chart values - with the same properties as
+  ## `cockroachdb-source-tls` under cockroachdbBranchConfig below. The object
+  ## name can be overridden with `dbPod.sourceTlsPropertyList: "my-name"`.
 
   # spannerBranchConfig:
   ## example
