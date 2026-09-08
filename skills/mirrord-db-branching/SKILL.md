@@ -3,7 +3,7 @@ name: mirrord-db-branching
 description: Helps users configure mirrord.json for database branching, enabling isolated database copies for safe development and testing. Use when the user wants to set up MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, or generic branches, configure copy modes, connection sources, schema migrations, IAM authentication, or manage database branches.
 metadata:
   author: MetalBear
-  version: "2.4"
+  version: "2.5"
 ---
 
 # Mirrord DB Branching Skill
@@ -176,6 +176,10 @@ operator:
 
 To keep an engine's branches on node-local storage instead, set `dbPod.storage.kind: "emptyDir"` — those volumes are capped by the older `operator.dbBranching.initPodVolumeLimit`/`databasePodVolumeLimit` values, which still work and (on the PVC path) size the claims when `databasePvcSize`/`initPvcSize` aren't set. Setting `storageClassName` to a class that doesn't exist fails the branch with a named error instead of hanging; an explicit `dbPod.volume`/`initVolume` still overrides the `storage` block entirely.
 
+### PostgreSQL server arguments
+
+Also cluster-admin Helm config, not a `db_branches` field: `pgBranchConfig.dbPod.dbServerArgs` is a list of extra command-line flags for every PostgreSQL branch's `postgres` server — for example serving TLS with certificates baked into a custom `dbPod.image`. Any file a flag references must already exist in that image (the operator doesn't mount certificate volumes into branch pods), the listener must stay on port `5432`, and the flags also apply to the temporary server the branch runs while restoring copied data, so an invalid flag fails branch creation. It's one setting for the whole cluster — use a [profile](https://metalbear.com/mirrord/docs/sharing-the-cluster/db-branching#branch-config-profiles) to vary it per branch.
+
 ## Connection Modes
 
 `connection` describes where mirrord reads the source connection details. The optional `type` controls where the env var is read from and defaults to `"env"`:
@@ -317,6 +321,12 @@ Customize `mysqldump` / `pg_dump`. Available in all copy modes. **MSSQL, MongoDB
 
 `flavor` selects what the Job runs: `"flyway"` for versioned SQL files run through Flyway, or `"container"` to run your own image (a migration script or framework CLI baked into the image).
 
+`"copy": { "mode": "schema" }` copies table definitions only, not rows — including the table your migration tool records applied migrations in. To carry that history onto the branch (e.g. so Flyway's `flyway_schema_history` doesn't look empty), name the table under `copy.tables` so its rows come along with its definition:
+
+```json
+{ "copy": { "mode": "schema", "tables": { "flyway_schema_history": {} } } }
+```
+
 ### Flyway flavor
 
 ```json
@@ -431,6 +441,10 @@ Spawns a Redis instance on your machine and redirects the app's Redis traffic to
 - `local.runtime`: `"container"` (default), `"redis_server"`, or `"auto"`.
 - `local.container_runtime`: `"docker"` (default), `"podman"`, or `"nerdctl"`.
 - `local.port`: sessions on the same port share one local Redis DB; a new session on that port replaces it.
+
+### Copying from a TLS source
+
+With `copy.mode: "all"`, the branch pod connects to the **source** Redis to read its keys. If the source only accepts TLS, a cluster admin provides the certificate material in a `MirrordPropertyList` named `redis-source-tls` (configurable via `operator.redisBranchConfig.dbPod.sourceTlsPropertyList`), in the same namespace as the target workload, backed by a Kubernetes `Secret` via `secretKeyRef` — never inlined. Supported properties: `tlsCaCert` (CA bundle to verify the source), `tlsClientCert` / `tlsClientKey` (mutual TLS, required together). At least one property must be set; its presence upgrades a plain `redis://` source URL (or host/port connection params) to TLS. This is admin/Helm-side setup, not a `db_branches` config field — mention it when a developer's Redis branch fails to copy from a TLS-only source. Requires operator/Helm chart **3.199.0+**.
 
 ## Generic Branches
 

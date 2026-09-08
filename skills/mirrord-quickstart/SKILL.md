@@ -3,7 +3,7 @@ name: mirrord-quickstart
 description: Guide users from zero to their first working mirrord session. Use when a user is new to mirrord, wants to install it, or needs help running their first session connecting to a Kubernetes cluster.
 metadata:
   author: MetalBear
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Mirrord Quickstart Skill
@@ -103,6 +103,13 @@ After running, verify the connection:
 # Quick test: print remote env vars
 mirrord exec --target pod/<pod-name> -- env | grep -i database
 ```
+
+## What's Next
+
+Once the first session works, point users to:
+- **`mirrord ui`** — launches a local dashboard showing every active session on the machine, with a live event stream (HTTP requests, file operations, DNS, outgoing connections). See [Local UI](https://metalbear.com/mirrord/docs/using-mirrord/local-ui).
+- **`mirrord up`** — for debugging several microservices together from one `mirrord-up.yaml` (compose-style). Point to the **mirrord-up** skill.
+- **Browser extension** — routes requests made from Chrome to the local process, for testing an HTTP-filtered session from a browser instead of `curl`. See [Debugging from Browser](https://metalbear.com/mirrord/docs/using-mirrord/incoming-traffic/debug-from-browser).
 
 ## Common First-Timer Issues
 
