@@ -35,6 +35,12 @@ mirrord ls
 mirrord exec --target pod/<pod-name> -- <your-command>
 ```
 
+## Next steps
+
+- `mirrord ui` — local dashboard with a live event stream for active sessions
+- `mirrord up` — debug several microservices together (see the **mirrord-up** skill)
+- Browser extension — route Chrome requests to your local process
+
 ## Learn more
 
 - [mirrord Documentation](https://metalbear.com/mirrord/docs/)

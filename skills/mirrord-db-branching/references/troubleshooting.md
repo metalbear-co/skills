@@ -129,6 +129,18 @@ MongoDB uses JSON-based filter syntax, not SQL. Filters must be valid MongoDB qu
 
 `migrations` requires the branch `name` to be set and is only available for MySQL, MariaDB, PostgreSQL, and MSSQL. A migration that conflicts with one already applied to the branch fails your session only; the branch stays usable.
 
+## Flyway refuses to migrate a schema-mode branch
+
+`"copy": { "mode": "schema" }` copies table structures only, not rows — so a branch cloned from a Flyway-managed source has all the schema's objects but an empty (or missing) `flyway_schema_history` table. Flyway refuses to migrate a schema that already has objects but no history table.
+
+**Solution:** Name the history table under `copy.tables` so its rows are copied along with its definition:
+
+```json
+{ "copy": { "mode": "schema", "tables": { "flyway_schema_history": {} } } }
+```
+
+If the source isn't Flyway-managed to begin with, use `"copy": { "mode": "empty" }` instead and let the migrations build the branch schema from scratch.
+
 ## `container` migration fails: connection variables can't be redirected
 
 `flavor: container` migration Jobs automatically inherit the target container's `env`/`envFrom`, and the operator redirects the branch's `connection` variables inside that inherited environment so the migration lands on the branch. This fails if the `connection` is declared via a `secret`, `gcp_secret_manager`, or `aws_secrets_manager` source **without `env_var_name` set** — the operator then has no variable name to redirect, so it fails the migration rather than silently running it against the source connection.

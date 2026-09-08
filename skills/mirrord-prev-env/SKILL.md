@@ -3,7 +3,7 @@ name: mirrord-prev-env
 description: Help users create and manage mirrord preview environments — running a modified service as an isolated pod in a shared Kubernetes cluster, scoped by an environment key and HTTP/queue traffic filtering, so teams can validate and review changes against real traffic without affecting live services. Use when a developer wants to run "mirrord preview" ad hoc, share a preview via a link (mirrord-share-ingress), or wire preview environments into CI with the metalbear-co/mirrord-preview GitHub Action (e.g. per-PR previews, least-privilege cluster access).
 metadata:
   author: MetalBear
-  version: "2.2"
+  version: "2.3"
 ---
 
 # Mirrord Preview Environment Skill
@@ -52,6 +52,7 @@ Preview environments **deploy an image into a shared cluster and route live traf
 - **Reaching a preview** requires sending the filter header (e.g. `baggage: mirrord-session=<key>`). Developers can inject it with the [mirrord Browser Extension](https://metalbear.com/mirrord/docs/using-mirrord/incoming-traffic/debug-from-browser) or `curl`. For non-technical stakeholders, `mirrord-share-ingress` mints a plain HTTPS link that injects the header server-side — see [Sharing a preview via a link](#sharing-a-preview-via-a-link).
 - **Local session precedence:** if a developer runs `mirrord exec` against the same deployment with the same environment key, the local session takes over — the preview environment is paused for the duration and resumes automatically when the local session ends.
 - **Multi-cluster:** with `operator.multiCluster.preview.mode: replicas` set on every cluster (operator/chart `3.193.0`+, mirrord `3.247.0`+), a preview runs a replica pod on **every** Workload cluster instead of only the Default cluster, so HTTP traffic is served wherever it enters and all replicas share one branch database over an operator-to-operator tunnel. This is a cluster-admin Helm setting — see the `mirrord-operator` skill for setup; nothing about the preview config or CLI usage below changes.
+- **Service meshes:** on a mesh-injected target, the preview pod gets a sidecar like any other pod, which would otherwise capture and reject the operator's incoming (filter-matched) connections — for example under `STRICT` mTLS. The operator automatically excludes the session's subscribed ports from the sidecar's inbound interception on **Istio** and **Linkerd** (their respective port-exclusion annotations); the sidecar still handles the preview's outgoing traffic. Other meshes (e.g. Kuma) aren't handled automatically — traffic to the preview fails there unless a cluster admin sets an equivalent exclusion for all preview pods via the operator's preview pod configuration.
 
 **Preview environment vs. a normal mirrord session:** `mirrord exec` runs your *local* process as if in the cluster (great for one developer iterating). A *preview environment* deploys a *built image* server-side and routes only filtered traffic to it — shareable and durable, ideal for CI, demos, async review, and AI agents deploying a change for the team to look at before merge.
 
@@ -406,7 +407,7 @@ The typical flow: on PR open/push, CI builds the image(s), pushes to a registry,
 | Issue | Solution |
 |-------|----------|
 | Preview feature unavailable / operator error | Need Operator 3.142.0+ with `operator.previewEnv: true`, CLI 3.189.0+, and the **Enterprise** plan. See `mirrord-operator` skill. |
-| Traffic never reaches the preview pod | Check the `header_filter` regex matches the header you send, the env key matches, and that intermediate services **propagate the header** on outgoing calls. |
+| Traffic never reaches the preview pod | Check the `header_filter` regex matches the header you send, the env key matches, and that intermediate services **propagate the header** on outgoing calls. On a service mesh other than Istio/Linkerd, the sidecar may be rejecting the operator's inbound connection — see [Service meshes](#how-preview-environments-work). |
 | `ErrImagePull` / `401 Unauthorized` on the preview pod | The preview pulls with the **target's** credentials (no separate registry config). Push the preview tag to the same registry and repository the target already pulls from. Common trap: a brand-new `ghcr.io` package created by a workflow's `GITHUB_TOKEN` starts **private**. |
 | `preview start` refuses — session already exists | A previous run's session for that key+target is still alive. Pass `--force` to replace it. |
 | Preview pod never becomes "Ready" | Expected — the inserted readinessGate keeps it un-Ready so the Service doesn't route to it. Filtered traffic still reaches it via the headless service. |
