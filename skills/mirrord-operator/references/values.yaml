@@ -131,6 +131,9 @@ operator:
   bullmqSplitting: false
   # Has to be set to `true` in order to use the NATS queue splitting feature.
   natsSplitting: false
+  # Has to be set to `true` in order to use the core NATS (non-JetStream) pub/sub
+  # queue splitting feature. Best-effort delivery: nothing is persisted.
+  natsPubsubSplitting: false
   # Temporal queue splitting proxy settings.
   temporalProxy:
     # Port for the Temporal frontend proxy workers connect to via `TEMPORAL_ADDRESS`.
@@ -1056,6 +1059,18 @@ operator:
   ##
   ##   dbPod:
   ##     sourceSslmode: "verify-full"
+  ##
+  ## `dbPod.sourceConfigMap` sets the ConfigMap that `configmap` connection param sources
+  ## read when a session's param names none itself: a `configMap` volume of the target
+  ## pod (`volume`) or a ConfigMap name (`name`), plus an optional data `key`. Developers
+  ## then write only the selector per param. Works on the default `dbPod` and on profiles:
+  ##
+  ##   profiles:
+  ##     app-config:
+  ##       dbPod:
+  ##         sourceConfigMap:
+  ##           volume: app-config
+  ##           key: config.yml
 
   # genericBranchConfig:
   ## example
