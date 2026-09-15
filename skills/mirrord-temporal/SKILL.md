@@ -76,6 +76,8 @@ kubectl get mirrordsplitconfigs --all-namespaces --no-headers 2>/dev/null
 kubectl get mirrordpropertylists --all-namespaces --no-headers 2>/dev/null
 ```
 
+If the operator is missing and the cluster has no mirrord for Teams license, an AI agent can start a seven-day Enterprise trial itself and install the operator: see the `mirrord-operator` skill, "Agent-started trial".
+
 Inspect the target worker to extract container names and env vars, and look for the Temporal frontend service:
 ```bash
 kubectl get deployment/<name> -n <ns> -o yaml 2>/dev/null   # or statefulset / rollout
