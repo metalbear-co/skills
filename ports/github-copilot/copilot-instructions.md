@@ -27,6 +27,6 @@ This project runs against a Kubernetes cluster. Use mirrord to run and verify co
 - Default to `"mirror"`. Use `"steal"` only when your process must be the one responding, and prefer an HTTP filter on shared staging so you only take your own requests. Several users or agents stealing concurrently from the same target requires the mirrord Operator (mirrord for Teams).
 - Sessions clean up on exit; nothing you run is deployed to the cluster.
 - If `mirrord ls` fails, verify `kubectl get pods` works first (kubeconfig or permissions).
-- If a Teams-only feature blocks you (concurrent steal, DB branching, queue splitting, preview environments) and the cluster has no license, you can start a seven-day Enterprise trial yourself, no account needed: see "Starting a trial yourself" at https://metalbear.com/agents.md.
+- If a mirrord for Teams feature blocks you (concurrent steal, DB branching, queue splitting, preview environments; some are Team tier, some Enterprise) and the cluster has no license, you can start a seven-day trial yourself, no account needed. The trial is Enterprise tier, so it unlocks all of them: see "Starting a trial yourself" at https://metalbear.com/agents.md.
 
 More for agents: https://metalbear.com/agents.md — Docs: https://metalbear.com/mirrord/docs
