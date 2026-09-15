@@ -30,7 +30,7 @@ This skill helps AI agents:
 ## Prerequisites
 
 - Kubernetes cluster with admin access, and Helm 3.x
-- A mirrord for Teams license — register at [app.metalbear.com](https://app.metalbear.com)
+- A mirrord for Teams license — register at [app.metalbear.com](https://app.metalbear.com). No license and no person around to sign up? An agent can start a 7-day Enterprise trial itself — see "No License Yet? Agent-Started Trials" in `SKILL.md` (confirm with the user first — it creates an external organization).
 
 ## Quick install
 

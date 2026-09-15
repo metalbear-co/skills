@@ -3,7 +3,7 @@ name: mirrord-operator
 description: Help users install and configure the mirrord Operator for team/enterprise environments. Use when users ask about operator setup, Helm installation, cloud API key or license configuration, air-gapped/offline licensing, enabling features (queue splitting, DB branching, preview environments, multi-cluster), internal registries, OpenShift/GKE Autopilot, RBAC, or multi-user mirrord deployments.
 metadata:
   author: MetalBear
-  version: "2.10"
+  version: "2.11"
 ---
 
 # Mirrord Operator Skill
@@ -62,7 +62,7 @@ helm version                                           # Helm 3.x
 kubectl auth can-i create deployments -n mirrord       # sufficient RBAC (usually cluster-admin to install)
 ```
 
-You also need a **mirrord for Teams license**. Register at [app.metalbear.com](https://app.metalbear.com).
+You also need a **mirrord for Teams license**. Register at [app.metalbear.com](https://app.metalbear.com). If there's no license and no person available to sign up, an agent can start a trial itself — see [No License Yet? Agent-Started Trials](#no-license-yet-agent-started-trials).
 
 ## Installation
 
@@ -138,6 +138,22 @@ Most features are **off by default** and gated behind a Helm value under `operat
 
 > For the specific minimum operator/CLI/chart versions each feature needs, see the corresponding feature skill (e.g. `mirrord-db-branching`, `mirrord-kafka`, `mirrord-prev-env`).
 
+## No License Yet? Agent-Started Trials
+
+If the cluster has no mirrord for Teams license, an agent doesn't have to stop and wait for a person to sign up. It can start a seven-day Enterprise trial itself:
+
+```bash
+curl -fsS -X POST https://app.metalbear.com/api/v1/agent/signup \
+  -H 'content-type: application/json' \
+  -d '{"agent": "claude-code", "developer_email": "<user email, optional>", "cluster_hint": "<optional>"}'
+```
+
+This endpoint needs no authentication and no credit card. The response is a provisional organization: an `api_key` to use as the cloud API key in Step 2 above, and a `claim_url` the user has to open to take ownership of that organization — until they do, nobody can administer billing or seats, and the org expires with the trial. Treat the returned `api_key` like any other secret material (see Security Boundaries) — put it in a Kubernetes Secret, don't echo it.
+
+**Confirm with the user before making this request** — it creates an external organization and, if `developer_email` is set, sends mail to that address; treat it with the same care as any other cluster-modifying action.
+
+Because the trial is an Enterprise license, it also covers Preview Environments (`operator.previewEnv: true`) for its duration — worth turning on during this install, since enabling it later needs another `helm upgrade`.
+
 ## Air-gapped / offline (Enterprise)
 
 Air-gapped clusters can't reach the cloud to exchange an API key for a license, so they use an offline **license certificate** or a self-hosted **license server**.
@@ -182,12 +198,22 @@ agent:
     registry: your-registry/mirrord
 ```
 
-Feature images are pulled only when the feature is enabled (Kafka sidecar, MSSQL tools, Flyway) and DB branch pods pull a per-engine database image — both have registry overrides under `operator.<engine>BranchConfig.dbPod.image` and `imagePullSecrets`. See `references/helm-values.md`.
+Feature images are pulled only when the feature is enabled (Kafka sidecar, MSSQL tools, Flyway, Liquibase) and DB branch pods pull a per-engine database image — both have registry overrides under `operator.<engine>BranchConfig.dbPod.image` and `imagePullSecrets`. See `references/helm-values.md`.
 
 ## Platform notes
 
 - **OpenShift** — set `openshift: true` in values (renders a SecurityContextConstraints), covering the `mirrord-operator` and `default` service accounts in the mirrord namespace.
-- **GKE Autopilot** — run the operator as a customer-owned privileged workload by applying a `WorkloadAllowlist` for `mirrord-agent`. If some configs produce non-matching agent pods, merge `agent.annotations.cloud.google.com/generate-allowlist: "true"` into values to get the exact allowlist embedded in the operator's error logs.
+- **GKE Autopilot** — mirrord is an approved [GKE Autopilot partner](https://docs.cloud.google.com/kubernetes-engine/docs/resources/autopilot-partners), so run the operator as a customer-owned privileged workload by applying an `AllowlistSynchronizer` (**not** a manually-written `WorkloadAllowlist` — Autopilot rejects a manual one with an admission error on standard clusters):
+  ```yaml
+  apiVersion: auto.gke.io/v1
+  kind: AllowlistSynchronizer
+  metadata:
+    name: mirrord-allowlist
+  spec:
+    allowlistPaths:
+      - "mirrord/mirrord-agent/*"
+  ```
+  If some configs still produce non-matching agent pods, merge `agent.annotations.cloud.google.com/generate-allowlist: "true"` into values to get the exact `WorkloadAllowlist` embedded in the operator's error logs.
 - **Alternate port** — if the operator can't bind 443, set `operator.port` (e.g. `3000` / `8443`) and ensure nodes can reach it.
 
 ## RBAC / multi-user access

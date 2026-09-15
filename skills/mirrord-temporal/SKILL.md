@@ -12,7 +12,7 @@ description: >
   feature of mirrord.
 metadata:
   author: MetalBear
-  version: "1.1"
+  version: "1.2"
 ---
 
 # mirrord Temporal Splitting Configuration Skill
@@ -150,7 +150,7 @@ Rules:
 - `spec.targetRef` = `{ apiVersion, kind, name }` (Deployment/StatefulSet/Rollout).
 - Each `spec.queues[]` needs `id`, `kind: temporal`, a `clientConfig` (the `MirrordPropertyList` name; or set once via `spec.clientConfigs.temporal`), and `appConfig.taskQueue`.
 - `appConfig.temporalAddress` (optional) names the env var holding the frontend address — the operator patches it so the worker connects to the operator's proxy. `appConfig.temporalNamespace` (optional) names the env var holding the Temporal namespace.
-- Each `appConfig` field uses the same source structure as other queue services: `env`, `envLike`, `volume` (read from a file mounted from a ConfigMap volume instead of an env var — operator **3.198.0+**), `fallback`, `valueSelector`, `valuePattern`, `containers`.
+- Each `appConfig` field uses the same source structure as other queue services: `env`, `envLike`, `volume` (read from a file mounted from a ConfigMap volume instead of an env var — operator **3.198.0+**), `podFile` (read from a file that exists only inside the running pods, e.g. Vault- or CSI-injected, with no ConfigMap/Secret behind it — operator **3.201.0+**), `fallback`, `valueSelector`, `valuePattern`, `containers`.
 - Per-queue Temporal options (`max_buffered_tasks`) live in a separate `MirrordPropertyList` referenced by the queue's `queueConfig`.
 - `spec.drainTimeout` (seconds) keeps the split's temporary resources alive after the last session ends so a new session can reuse them; unset or `0` tears down immediately. It does **not** wait for in-flight work.
 
@@ -180,7 +180,7 @@ spec:
           - env: <NAMESPACE_ENV_VAR>
 ```
 
-The operator can only read the worker's env vars if they are defined directly in the pod template (`value`, or `valueFrom` a ConfigMap reference) or loaded from ConfigMaps via `envFrom`. Vault-style injected env vars are invisible to it.
+The operator can only read the worker's env vars if they are defined directly in the pod template (`value`, or `valueFrom` a ConfigMap reference) or loaded from ConfigMaps via `envFrom`. Vault-style injected env vars are invisible to it as env vars — but a `podFile` source (operator **3.201.0+**) can read the same value straight from the rendered file (see `references/temporal-split-config.md`).
 
 ### 4. Generate mirrord.json split_queues section
 
@@ -259,7 +259,7 @@ If the user has the mirrord-config skill, point them there for the full mirrord.
 - [ ] Env vars named in `appConfig` are readable by the operator (pod template `value`/ConfigMap `valueFrom`, or `envFrom` ConfigMaps).
 
 ### Proactive warnings
-- Vault-injected env vars → operator can't read them; move the task queue name into the pod template or a ConfigMap.
+- Vault-injected env vars → operator can't read them as env vars; move the task queue name into the pod template or a ConfigMap, or use a `podFile` source (operator 3.201.0+) to read it straight from the injected file.
 - Overlapping filters between teammates → the most recently started session wins a doubly-matched task.
 - Long local debugging pauses → buffered tasks accumulate; suggest capping with `max_buffered_tasks` (overflow goes to the deployed worker's main queue).
 - Certificate rotation → picked up only by new splits, not running ones.

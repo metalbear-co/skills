@@ -36,9 +36,10 @@ openssl pkcs12 -in truststore.p12 -nokeys -out ca-cert.pem
 Then use `ssl.certificate.pem`, `ssl.key.pem`, `ssl.ca.pem` in the client config. This path (and PKCS#12 truststores, which native loading doesn't support) still applies regardless of operator version.
 
 ## Vault-injected config not supported (PRO-102)
-**Status:** Open — Triage  
-Kafka splitting only works when topic name and group ID are exposed as environment variables in the pod spec (either directly or via ConfigMap). HashiCorp Vault `vault-agent-injector` injects config at runtime, which the operator cannot read.  
-**Workaround:** Expose the topic name and group ID as regular env vars in the pod template for the operator to read. The actual application can still use Vault for other config.
+**Status:** Resolved (operator 3.201.0+)  
+Kafka splitting used to only work when topic name and group ID were exposed as environment variables in the pod spec (either directly or via ConfigMap). HashiCorp Vault `vault-agent-injector` and secrets-store CSI drivers inject config at runtime into a file, which is invisible as an env var.  
+**Fix:** set a `podFile` source on the `appConfig.topic`/`groupId`/`appId` entry, naming the absolute in-container path (`podFile.path`) and, if needed, the container to read it from (`podFile.container` — defaults to a `vault-agent` sidecar, else the pod's first app container). The operator reads the file via `pods/exec` (`cat`) in a running target pod, then mounts a Secret with the substituted content over the same path, so the app never has to change how it reads the file.  
+**Workaround (older operators):** Expose the topic name and group ID as regular env vars in the pod template for the operator to read. The actual application can still use Vault for other config.
 
 ## Operational friction with many Kafka clusters (SOL-144)
 **Status:** Improved by the new model  
@@ -88,7 +89,8 @@ All three template variables (`{{RANDOM}}`, `{{FALLBACK}}`, `{{ORIGINAL_TOPIC}}`
 | Producer timeout with single-replica topics | `min.insync.replicas` not copied to ephemeral topics | INT-384 |
 | `InconsistentGroupProtocol` error, Kafka Streams app | Kafka Streams incompatibility (needs JVM proxy) | INT-226 |
 | `InconsistentGroupProtocol` error, non-Streams client (e.g. KafkaJS) | Custom partition-assignment protocol — set `mirrord.temporary_group_id: "true"` | — |
-| Splitting doesn't start, env vars not found | Vault-injected config — operator can't read it | PRO-102 |
+| Splitting doesn't start, env vars not found | Vault/CSI-injected config — use a `podFile` source instead (operator 3.201.0+) | PRO-102 |
+| Long rollout causes `mirrord.temporary_group_id` splits to time out at 180s | Raise `mirrord.group_join_timeout` (operator 3.204.0+) | — |
 | Auth fails with JKS credentials | Operator 3.199.0+ loads JKS/JCEKS/PKCS#12 natively via `mirrord.ssl.*`; older operators need PEM conversion | INT-165 |
 | Splitting works but permissions fail on temp topics | Strimzi ACLs need `mirrord-tmp-*` prefix rules | INT-258 |
 | Splitting fails with `PolicyViolation` broker error (e.g. Confluent Cloud) | Managed platform enforces a minimum replication factor — set `mirrord.split_topic.replication_factor` | — |
@@ -103,4 +105,7 @@ Some features require a minimum version:
 - **operator ≥ 3.195.0**: `mirrord.temporary_group_id` (fixes `INCONSISTENT_GROUP_PROTOCOL` for non-Streams clients like KafkaJS).
 - **operator ≥ 3.198.0**: `appConfig.topic`/`groupId`/`appId` `volume` source (read the name from a file mounted from a ConfigMap volume instead of an env var).
 - **operator ≥ 3.199.0**: native Java KeyStore credentials (`mirrord.ssl.*` properties) — see the JKS entry above.
+- **operator ≥ 3.201.0**: `appConfig.topic`/`groupId`/`appId` `podFile` source (read the name from a file that exists only inside the running pods, e.g. Vault- or CSI-injected).
+- **operator ≥ 3.204.0**: `mirrord.group_join_timeout` (raise the 180s default wait for a temporary-group split to join, for slow rollouts).
+- `payload_protobuf` (decode raw protobuf record values for `jq_filter`, librdkafka client only) — no minimum version is called out separately in the docs beyond the librdkafka requirement; treat it as needing a recent operator/CLI and confirm against the changelog if a session rejects the field.
 - Always check the operator version when troubleshooting: `kubectl get deploy mirrord-operator -n mirrord -o jsonpath='{.spec.template.spec.containers[0].image}'`

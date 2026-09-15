@@ -14,7 +14,7 @@ This skill helps AI agents:
 
 ## Two modes
 
-1. **Ad-hoc (developer)** — `mirrord preview start -f mirrord.json -i <image> -k <key>`, `mirrord preview status`, `mirrord preview stop --key <key>`.
+1. **Ad-hoc (developer)** — `mirrord preview start -f mirrord.json -i <image> -k <key>`, `mirrord preview status`, `mirrord preview logs --key <key>` (see why a preview failed), `mirrord preview stop --key <key>`.
 2. **CI (GitHub Action)** — `metalbear-co/mirrord-preview` starts/stops previews across a PR lifecycle (or drive the CLI directly in CI).
 
 ## Example prompts
@@ -37,6 +37,7 @@ This skill helps AI agents:
 # Ad-hoc
 mirrord preview start -f mirrord.json -i myrepo/myapp:tag -k pr-123
 mirrord preview status
+mirrord preview logs --key pr-123   # what the preview's pods wrote (requires mirrord 3.255.0+, operator+chart 3.205.0+)
 mirrord preview stop --key pr-123
 ```
 
@@ -55,7 +56,7 @@ mirrord preview stop --key pr-123
 
 - mirrord **Operator 3.142.0+** deployed with `operator.previewEnv: true`
 - mirrord **CLI 3.189.0+** (the Action installs the latest automatically)
-- **Enterprise** plan
+- **Enterprise** plan (a free trial is minted as Enterprise; an agent with no license can start one itself — see the `mirrord-operator` skill)
 - Reachable kubeconfig (laptop or CI runner)
 - A **built and pushed** container image for the preview pod — pushed to the **same registry/repository the target already pulls from** (the preview pulls with the target's credentials)
 

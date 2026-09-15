@@ -3,7 +3,7 @@ name: mirrord-db-branching
 description: Helps users configure mirrord.json for database branching, enabling isolated database copies for safe development and testing. Use when the user wants to set up MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, or generic branches, configure copy modes, connection sources, schema migrations, IAM authentication, or manage database branches.
 metadata:
   author: MetalBear
-  version: "2.5"
+  version: "2.6"
 ---
 
 # Mirrord DB Branching Skill
@@ -146,7 +146,9 @@ Enable the matching Helm value on the operator chart, and meet the minimum versi
 | Generic | 3.183.0 | 3.232.0 | 3.183.0 | `operator.genericBranching: true` |
 | Schema migrations | 3.182.0 | 3.230.0 | 3.182.0 | (per engine above) |
 | Schema migrations: inherited target env (`container` flavor) | 3.191.0 | 3.238.0 | 3.191.0 | (per engine above) |
+| Schema migrations: Liquibase (`liquibase` flavor) | 3.207.0 | 3.257.0 | 3.207.0 | (per engine above) |
 | Branch query params (`query_params`, pg only) | 3.197.0 | 3.250.0 | 3.197.0 | `operator.pgBranching: true` |
+| ConfigMap connection source | 3.205.0 | 3.256.0 | 3.205.0 | (per engine above) |
 
 ## Branch Storage & Resources
 
@@ -221,6 +223,7 @@ Each param is individually optional; mirrord fills engine defaults for any not s
 Any param (and, where noted, the `url`) can be sourced beyond a plain env var:
 
 - **Kubernetes Secret** (params only): `{ "secret": "rds-credentials", "key": "password", "env_var_name": "DB_PASSWORD" }`
+- **ConfigMap** (params only): read a value out of a config file mounted from a ConfigMap, instead of an env var: `{ "configmap": { "volume": "app-config" }, "key": "config.yml", "value_selector": ".database.host", "env_var_name": "DB_HOST" }`. `configmap` is either the ConfigMap's name (`"configmap": "app-config"`) or, preferred when a deployment tool renames the ConfigMap per release, a `configMap` volume of the target pod (`{ "volume": "app-config" }`) — the volume name in the pod spec stays stable even when the ConfigMap it points at changes. `key` is the entry in the ConfigMap's `data` (with the volume form, the file name inside the volume, resolved through any `items` remapping). `value_selector` runs over the entry parsed as JSON/YAML, supporting nested keys (`.database.host`) and `.[]` to iterate — same restrictions as the composite selectors below; `value_pattern` is a regex capture group for entries that aren't JSON/YAML. The two are mutually exclusive; without either, the whole (trimmed) entry is the value. `env_var_name` delivers the value to your local process the same way as other sources. A cluster admin can set the shared `configmap`/`key` once for everyone with `dbPod.sourceConfigMap` on the operator's [branch config profile](https://metalbear.com/mirrord/docs/sharing-the-cluster/db-branching#branch-config-profiles), leaving each param to carry only its own `value_selector` and `env_var_name`. Requires operator/Helm chart **3.205.0+** and CLI **3.256.0+**.
 - **Google Secret Manager** (url or params; uses the target pod's GKE Workload Identity): url → `{ "type": "gcp_secret_manager", "secret_ref": "projects/../secrets/../versions/latest", "env_var_name": "DATABASE_URL" }`; param → `{ "gcp_secret_manager": "projects/../secrets/../versions/latest", "env_var_name": "DB_PASSWORD" }`
 - **AWS Secrets Manager** (url or params; uses the target pod's service account via IRSA / EKS Pod Identity, the same way [AWS RDS IAM](#iam-authentication) works): url → `{ "type": "aws_secrets_manager", "secret_ref": "arn:aws:secretsmanager:us-east-1:123456789012:secret:db-url", "env_var_name": "DATABASE_URL" }`; param → `{ "aws_secrets_manager": "db-password", "env_var_name": "DB_PASSWORD" }`. `secret_ref` is a secret name or a full ARN; the region comes from the ARN, or from `AWS_REGION`/`AWS_DEFAULT_REGION` on the target pod for a plain name. Not supported for [generic branches](#generic-branches).
   - `env_var_name` is normally optional on these three sources, but becomes **required** when the connection is used by a `container`-flavor [migration](#schema-migrations) Job — the operator needs a variable name to redirect the branch connection into the Job's inherited environment. Without it, the migration fails.
@@ -319,12 +322,18 @@ Customize `mysqldump` / `pg_dump`. Available in all copy modes. **MSSQL, MongoDB
 
 `migrations` runs your schema migrations against the branch at creation, before it becomes ready — so the branch matches the schema your working tree expects. Supported for **MySQL, MariaDB, PostgreSQL, MSSQL**. Requires the branch `name` to be set. Failure aborts the session (the app never starts against a half-migrated branch).
 
-`flavor` selects what the Job runs: `"flyway"` for versioned SQL files run through Flyway, or `"container"` to run your own image (a migration script or framework CLI baked into the image).
+`flavor` selects what the Job runs: `"flyway"` for versioned SQL files run through Flyway, `"liquibase"` for Liquibase changelogs, or `"container"` to run your own image (a migration script or framework CLI baked into the image).
 
-`"copy": { "mode": "schema" }` copies table definitions only, not rows — including the table your migration tool records applied migrations in. To carry that history onto the branch (e.g. so Flyway's `flyway_schema_history` doesn't look empty), name the table under `copy.tables` so its rows come along with its definition:
+`"copy": { "mode": "schema" }` copies table definitions only, not rows — including the table (or tables) your migration tool records applied migrations in. To carry that history onto the branch (e.g. so Flyway's `flyway_schema_history` doesn't look empty), name the table under `copy.tables` so its rows come along with its definition:
 
 ```json
 { "copy": { "mode": "schema", "tables": { "flyway_schema_history": {} } } }
+```
+
+Liquibase keeps two history tables, and both have to come across:
+
+```json
+{ "copy": { "mode": "schema", "tables": { "DATABASECHANGELOG": {}, "DATABASECHANGELOGLOCK": {} } } }
 ```
 
 ### Flyway flavor
@@ -339,8 +348,32 @@ Customize `mysqldump` / `pg_dump`. Available in all copy modes. **MSSQL, MongoDB
 }
 ```
 
-- `path`: local migrations directory, relative to the working directory.
-- `image`: optional runner image override (default `flyway/flyway:12`).
+- `path`: local directory of migration files, relative to the working directory. Mutually exclusive with `locations`.
+- `locations`: Flyway locations inside `image` holding the migration files, for images with the SQL baked in. Mutually exclusive with `path`, and requires `image`.
+- `image`: optional runner image override (default `flyway/flyway:12`; required with `locations`).
+
+Exactly one of `path` or `locations` is required.
+
+### Liquibase flavor
+
+Runs [Liquibase](https://docs.liquibase.com) changelogs (XML, YAML, JSON, or formatted SQL). Liquibase records applied changesets in a `DATABASECHANGELOG` table, so re-runs apply only what's new. It starts from a single root changelog rather than scanning a directory, so `changelog_file` is always required:
+
+```json
+{
+  "migrations": {
+    "flavor": "liquibase",
+    "path": "./changelog",
+    "changelog_file": "db.changelog-master.xml"
+  }
+}
+```
+
+- `changelog_file`: root changelog file, resolved inside the search root. Recorded in `DATABASECHANGELOG`, so changing it re-runs every changeset.
+- `path`: local directory of changelog files, relative to the working directory. Mutually exclusive with `search_path`.
+- `search_path`: Liquibase search path inside `image`, joined into `LIQUIBASE_SEARCH_PATH`. Mutually exclusive with `path`, and requires `image`.
+- `image`: optional runner image override (default `liquibase/liquibase:4.33`; required with `search_path`). The default image bundles the PostgreSQL, MariaDB, and SQL Server drivers; a custom image needs the driver for your dialect, and MySQL branches are reached over `jdbc:mariadb://`.
+
+Exactly one of `path` or `search_path` is required.
 
 ### Container flavor
 
