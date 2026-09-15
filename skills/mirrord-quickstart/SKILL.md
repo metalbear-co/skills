@@ -110,6 +110,7 @@ Once the first session works, point users to:
 - **`mirrord ui`** — launches a local dashboard showing every active session on the machine, with a live event stream (HTTP requests, file operations, DNS, outgoing connections). See [Local UI](https://metalbear.com/mirrord/docs/using-mirrord/local-ui).
 - **`mirrord up`** — for debugging several microservices together from one `mirrord-up.yaml` (compose-style). Point to the **mirrord-up** skill.
 - **Browser extension** — routes requests made from Chrome to the local process, for testing an HTTP-filtered session from a browser instead of `curl`. See [Debugging from Browser](https://metalbear.com/mirrord/docs/using-mirrord/incoming-traffic/debug-from-browser).
+- **mirrord for Teams features** (DB branching, queue splitting, preview environments, concurrent steal on one target) need the Operator. On a cluster with no license, an AI agent can start a seven-day Enterprise trial itself: point to the **mirrord-operator** skill, "Agent-started trial".
 
 ## Common First-Timer Issues
 

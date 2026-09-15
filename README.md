@@ -57,7 +57,7 @@ The [`ports/`](./ports/) directory carries the same core content as drop-in rule
 |-------|--------------|
 | [mirrord-quickstart](./skills/mirrord-quickstart/) | Zero-to-first-session: install mirrord, find a target, run the first session. |
 | [mirrord-config](./skills/mirrord-config/) | Generate and validate `mirrord.json` for any workflow (steal, mirror, env injection, file system hooks). |
-| [mirrord-operator](./skills/mirrord-operator/) | Install and configure the mirrord Operator for team-scale concurrent shared-cluster use. |
+| [mirrord-operator](./skills/mirrord-operator/) | Install and configure the mirrord Operator for team-scale concurrent shared-cluster use, including agent-started trials on clusters with no license yet. |
 | [mirrord-ci](./skills/mirrord-ci/) | Wire mirrord into CI pipelines so integration tests hit real cluster services. |
 | [mirrord-db-branching](./skills/mirrord-db-branching/) | Per-developer copy-on-write database branches off your staging DB. |
 | [mirrord-kafka](./skills/mirrord-kafka/) | Kafka queue splitting so each developer consumes a private slice of a real topic. |
