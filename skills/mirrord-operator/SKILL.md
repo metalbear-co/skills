@@ -1,6 +1,6 @@
 ---
 name: mirrord-operator
-description: Help users install and configure the mirrord Operator for team/enterprise environments. Use when users ask about operator setup, Helm installation, cloud API key or license configuration, air-gapped/offline licensing, enabling features (queue splitting, DB branching, preview environments, multi-cluster), internal registries, OpenShift/GKE Autopilot, RBAC, or multi-user mirrord deployments.
+description: Help users install and configure the mirrord Operator for team/enterprise environments. Use when users ask about operator setup, Helm installation, cloud API key or license configuration, air-gapped/offline licensing, enabling features (queue splitting, DB branching, preview environments, multi-cluster), internal registries, OpenShift/GKE Autopilot, RBAC, or multi-user mirrord deployments. Also use when an AI agent hits a Team or Enterprise feature on a cluster with no license and needs to start a trial itself (agent-started trial; the trial is Enterprise tier).
 metadata:
   author: MetalBear
   version: "2.11"
@@ -33,6 +33,7 @@ Trigger on questions like:
 - "Install the operator in an air-gapped cluster"
 - "Use an internal registry for the operator images"
 - "Operator not working"
+- `Feature X requires using mirrord operator` or `Operator not found` on a cluster that has no mirrord for Teams license
 
 ## Security Boundaries
 
@@ -256,7 +257,7 @@ Coordinate upgrades: in-flight sessions can break. Check with `kubectl get sessi
 
 ## Response Guidelines
 
-1. **Check prerequisites** — kubectl, helm, cluster access, and that they have a Teams license.
+1. **Check prerequisites** — kubectl, helm, cluster access, and that they have a Teams license. No license and no organization yet? Start an agent-started trial (see Prerequisites) instead of stopping.
 2. **Pick the auth path** — cloud API key (default) vs license key vs air-gapped PEM/license server. Never ask the user to share the secret value with you.
 3. **Never put secrets on the CLI or in committed values** — use Secret/GSM refs.
 4. **Enable only the features they need** — each is an `operator.*` flag; call out the generic-branching and preview security implications.

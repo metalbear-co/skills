@@ -52,7 +52,7 @@ https://raw.githubusercontent.com/metalbear-co/mirrord/main/mirrord-schema.json
 If using absolute paths, search for the schema using patterns like `**/mirrord-db-branching/references/*`.
 
 **Step 1: Verify Prerequisites**
-Each engine has minimum operator, mirrord CLI, and Helm chart versions, and a per-engine Helm value that must be enabled. See [Version Requirements](#version-requirements) below.
+Each engine has minimum operator, mirrord CLI, and Helm chart versions, and a per-engine Helm value that must be enabled. See [Version Requirements](#version-requirements) below. DB branching needs the operator with a Teams/Enterprise license; on a cluster with no license, an AI agent can start a seven-day Enterprise trial itself (see the `mirrord-operator` skill, "Agent-started trial").
 
 **Step 2: Identify Connection Source**
 The app must read its DB connection from environment variables (or Kubernetes Secrets). mirrord overrides those variables with the branch's connection details for the session. Confirm the exact variable name(s) the app uses.
