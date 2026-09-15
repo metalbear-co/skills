@@ -85,6 +85,12 @@ Then match your config to it:
 
 For apps that split the connection across variables, use params mode; for a value packed into one variable, use `value_pattern`. See the Connection Modes doc.
 
+## ConfigMap connection param rejected
+
+A `configmap` param source needs a `configmap` (or an admin-set `dbPod.sourceConfigMap` on the branch profile) plus a `key` from one side or the other. If a param omits `configmap` and the profile has no `sourceConfigMap`, or both sides omit `key`, the branch fails with an error naming both places to fix it.
+
+**Solution:** Either set `configmap`/`key` directly on the param, or select a `profile` whose `dbPod.sourceConfigMap` supplies them, and confirm operator/Helm chart **3.205.0+** and CLI **3.256.0+** — older versions reject the field outright.
+
 ## AWS RDS IAM authentication fails
 
 mirrord reads AWS credentials from the **target pod's** environment (not your local shell).
@@ -129,17 +135,27 @@ MongoDB uses JSON-based filter syntax, not SQL. Filters must be valid MongoDB qu
 
 `migrations` requires the branch `name` to be set and is only available for MySQL, MariaDB, PostgreSQL, and MSSQL. A migration that conflicts with one already applied to the branch fails your session only; the branch stays usable.
 
-## Flyway refuses to migrate a schema-mode branch
+## Flyway/Liquibase refuses to migrate a schema-mode branch
 
-`"copy": { "mode": "schema" }` copies table structures only, not rows — so a branch cloned from a Flyway-managed source has all the schema's objects but an empty (or missing) `flyway_schema_history` table. Flyway refuses to migrate a schema that already has objects but no history table.
+`"copy": { "mode": "schema" }` copies table structures only, not rows — so a branch cloned from a Flyway- or Liquibase-managed source has all the schema's objects but an empty (or missing) history table. Flyway refuses to migrate a schema that already has objects but no `flyway_schema_history` table.
 
-**Solution:** Name the history table under `copy.tables` so its rows are copied along with its definition:
+**Solution:** Name the history table(s) under `copy.tables` so their rows are copied along with their definitions:
 
 ```json
 { "copy": { "mode": "schema", "tables": { "flyway_schema_history": {} } } }
 ```
 
-If the source isn't Flyway-managed to begin with, use `"copy": { "mode": "empty" }` instead and let the migrations build the branch schema from scratch.
+Liquibase keeps two history tables, and both have to come across:
+
+```json
+{ "copy": { "mode": "schema", "tables": { "DATABASECHANGELOG": {}, "DATABASECHANGELOGLOCK": {} } } }
+```
+
+If the source isn't Flyway/Liquibase-managed to begin with, use `"copy": { "mode": "empty" }` instead and let the migrations build the branch schema from scratch.
+
+## Liquibase migration stuck behind `DATABASECHANGELOGLOCK`
+
+An interrupted Liquibase run can leave a lock row held in `DATABASECHANGELOGLOCK` on a reused branch, which fails every subsequent migration Job until it's cleared. Likewise, an edited already-applied changeset fails with a checksum conflict — the branch stays usable, but only that session fails.
 
 ## `container` migration fails: connection variables can't be redirected
 

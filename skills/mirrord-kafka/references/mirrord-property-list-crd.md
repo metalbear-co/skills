@@ -28,6 +28,7 @@ Consumed by the operator, not forwarded to the Kafka client:
 | `mirrord.auth.kind` | `MSK_IAM` | Extra authentication mechanism (only supported value). See [MSK IAM](#aws-msk-iam). |
 | `mirrord.auth.aws_region` | e.g. `eu-south-1` | AWS region; required when `mirrord.auth.kind` is `MSK_IAM`. |
 | `mirrord.temporary_group_id` | `"true"` | Works around `INCONSISTENT_GROUP_PROTOCOL` errors from clients that advertise their own partition-assignment protocol (e.g. KafkaJS). Requires operator **3.195.0+**. See [KafkaJS / custom group protocols](#kafkajs--custom-group-protocols-mirrordtemporary_group_id). |
+| `mirrord.group_join_timeout` | seconds, e.g. `"600"` | Raises the default 180s wait for a `mirrord.temporary_group_id` split to join the original consumer group once the previous generation's pods have left it. Requires operator **3.204.0+**. |
 | `mirrord.split_topic.replication_factor` | a positive number, `copy`, or `-1` | Replication factor for temporary (split) topics. Default is `1`. Requires operator **3.191.0+**. See [Temporary Topic Replication Factor](#temporary-topic-replication-factor). |
 | `mirrord.ssl.truststore.base64` / `mirrord.ssl.keystore.base64` | base64 text of the store | Inline Java KeyStore (JKS/JCEKS/PKCS#12), given instead of a file. Requires operator **3.199.0+**. See [Java KeyStore credentials](#java-keystore-credentials). |
 | `mirrord.ssl.keystore.alias` | key entry name | Which private key to use from a keystore holding more than one. Requires operator **3.199.0+**. |
@@ -147,6 +148,19 @@ spec:
 ```
 
 With this set, splits patch the workload's consumer-group env vars (`appConfig.groupId`) to a generated temporary group, alongside the topic rewrite. The operator keeps the original group to itself, so it never negotiates a protocol with the application's client — any client library works. Offsets are preserved: the operator keeps committing into the original group, and the workload resumes exactly where it left off when the split ends.
+
+The operator can only join the original group once every pod of the previous generation has left it, so the split waits for the workload's rollout to finish — 180 seconds by default, then the session fails. For a slower rollout (many replicas, a long termination grace period, a consumer that stays in the group until its session timeout expires), raise the wait with `mirrord.group_join_timeout`, in seconds:
+
+```yaml
+spec:
+  properties:
+    - name: mirrord.temporary_group_id
+      value: "true"
+    - name: mirrord.group_join_timeout
+      value: "600"
+```
+
+Requires operator **3.204.0+**; earlier operators reject it as an unknown `mirrord.` key.
 
 ### Temporary Topic Replication Factor (`mirrord.split_topic.replication_factor`)
 

@@ -3,7 +3,7 @@ name: mirrord-prev-env
 description: Help users create and manage mirrord preview environments — running a modified service as an isolated pod in a shared Kubernetes cluster, scoped by an environment key and HTTP/queue traffic filtering, so teams can validate and review changes against real traffic without affecting live services. Use when a developer wants to run "mirrord preview" ad hoc, share a preview via a link (mirrord-share-ingress), or wire preview environments into CI with the metalbear-co/mirrord-preview GitHub Action (e.g. per-PR previews, least-privilege cluster access).
 metadata:
   author: MetalBear
-  version: "2.3"
+  version: "2.4"
 ---
 
 # Mirrord Preview Environment Skill
@@ -63,7 +63,7 @@ Preview environments **deploy an image into a shared cluster and route live traf
 | **Operator** | mirrord Operator **3.142.0+**, installed with the preview feature enabled. |
 | **CLI** | mirrord CLI **3.189.0+**. (The CI Action installs the latest automatically.) |
 | **Helm flag** | The operator must be deployed with preview environments enabled (see below). |
-| **License** | Preview environments require the **Enterprise** plan. On a cluster with no license, an AI agent can start a seven-day Enterprise trial itself: see the `mirrord-operator` skill, "Agent-started trial". |
+| **License** | Preview environments require the **Enterprise** plan. A [free trial](https://app.metalbear.com/account/sign-up) is minted as Enterprise, so previews work for its duration; an agent working on a cluster with no license can start that trial itself — see the `mirrord-operator` skill's Agent-Started Trials section. |
 | **Cluster access** | A valid kubeconfig reachable from wherever you run preview (laptop or CI runner). |
 | **A built, pushed image** | Preview deploys an *image*, not local source. The preview pod is a copy of the **target's pod spec with the image swapped**, so it pulls with the **same credentials as the target** — there is no separate registry config for previews. Push the preview tag to the **same registry and repository the target already pulls from**, or it fails with `ErrImagePull`. |
 
@@ -92,6 +92,10 @@ mirrord preview start -f mirrord.json -i myrepo/myapp:my-tag -k alice-checkout-f
 
 # See active preview environments and their pods
 mirrord preview status
+mirrord preview status --failed    # list failed environments instead of active ones
+
+# Print what a preview's pods have written (where a failure reason usually lives)
+mirrord preview logs --key alice-checkout-fix
 
 # Stop a preview by its environment key
 mirrord preview stop --key alice-checkout-fix
@@ -101,6 +105,8 @@ mirrord preview start -f mirrord.json -i myrepo/myapp:new-tag -k alice-checkout-
 ```
 
 If you omit `-k`, mirrord generates an environment key for you (shown in the output and via `mirrord preview status`).
+
+`mirrord preview logs` prints the same output `preview start` already shows when it gives up — pass `-t <target>` to pick one environment when several share a key. It covers failed environments too, retained for a short inspection window after the failure (not indefinitely), and requires mirrord **3.255.0+** and operator + Helm chart **3.205.0+** — an older operator can't serve the output.
 
 Example `start` output:
 
@@ -412,6 +418,7 @@ The typical flow: on PR open/push, CI builds the image(s), pushes to a registry,
 | `preview start` refuses — session already exists | A previous run's session for that key+target is still alive. Pass `--force` to replace it. |
 | Preview pod never becomes "Ready" | Expected — the inserted readinessGate keeps it un-Ready so the Service doesn't route to it. Filtered traffic still reaches it via the headless service. |
 | Preview times out coming up | Increase `feature.preview.creation_timeout_secs` (CLI `--timeout`). |
+| Preview fails/times out for a reason in the application, not mirrord | `preview start` prints the last output from the preview pods alongside the error (missing config file, failed connection, stack trace). If it's scrolled off, `mirrord preview logs --key <key>` reprints it for as long as the failed session is retained (requires mirrord 3.255.0+, operator + chart 3.205.0+). |
 | Preview environments linger | Set a TTL; to remove now: `mirrord preview stop --key <key>`. Check live ones with `mirrord preview status`. |
 | No `preview URL` / share link doesn't work | Link sharing needs `mirrord-share-ingress` installed with a `shareDomain` (see [Sharing a preview via a link](#sharing-a-preview-via-a-link)). A share host is minted regardless of `http_filter` — a custom filter still gets a link, it just additionally routes the injected baggage header alongside its own filter. |
 | Want to iterate locally against the same preview | Run `mirrord exec` with the same target + env key; the local session preempts the preview and the preview resumes when you stop. |
