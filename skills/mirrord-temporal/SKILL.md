@@ -12,7 +12,7 @@ description: >
   feature of mirrord.
 metadata:
   author: MetalBear
-  version: "1.2"
+  version: "1.3"
 ---
 
 # mirrord Temporal Splitting Configuration Skill
@@ -213,6 +213,28 @@ Supported `message_filter` keys — each maps a key to a regex, and **all** spec
 
 An empty `message_filter: {}` with no `jq_filter` is **match-none** (the local worker gets zero tasks).
 
+**Composable metadata filter (`filter`) — NEW, alternative to `message_filter`:**
+```json
+{
+  "operator": true,
+  "target": "deployment/<workload>",
+  "feature": {
+    "split_queues": {
+      "<queue-id>": {
+        "queue_type": "Temporal",
+        "filter": {
+          "any_of": [
+            { "metadata": "^header.baggage: .*mirrord-session={{ key }}.*$" },
+            { "metadata": "^header.test: .*mirrord-session={{ key }}.*$" }
+          ]
+        }
+      }
+    }
+  }
+}
+```
+`filter` takes a single `{ "metadata": "<regex>" }`, or an `any_of`/`all_of` list of them. Each `metadata` regex is matched against every task metadata entry (the same keys `message_filter` supports — `workflow_id`, `header.<name>`, search attributes, …) rendered as `<name>: <value>`. Use either `filter` or `message_filter` on an entry, not both. Requires mirrord **3.264.0+** and operator **3.212.0+**. A `metadata` regex can't be verified against a specific attribute name, so a queue covered by a `splitQueues` policy rule rejects a lone `metadata` filter the same way it rejects a lone `jq_filter` — use `message_filter` there instead.
+
 **Filter on task content (`jq_filter`):**
 ```json
 {
@@ -237,7 +259,7 @@ A task matches if the program outputs `true`.
 
 Notes to convey:
 - **`queue_mode: "mirror"` is not supported for Temporal** — a Temporal task is always stolen (only the matching local worker gets it). Don't offer mirror mode.
-- If both `message_filter` and `jq_filter` are set, **both** must match.
+- If a `filter`/`message_filter` and a `jq_filter` are both set, **both** must match.
 - For multiple queues (or the same ID on multiple brokers), use the array form with `queue_id` per entry.
 - With `operator.injectSessionKeyHeader` enabled, tasks routed to a session are stamped with a `mirrord-key` **activity task header**. Workflow tasks are never stamped (their header lives in replayed workflow history).
 
@@ -266,6 +288,7 @@ If the user has the mirrord-config skill, point them there for the full mirrord.
 - Long local debugging pauses → buffered tasks accumulate; suggest capping with `max_buffered_tasks` (overflow goes to the deployed worker's main queue).
 - Certificate rotation → picked up only by new splits, not running ones.
 - `drainTimeout: 0` / unset → immediate teardown; in-flight work may be lost.
+- Python worker with `grpc compression not supported` → the operator's Temporal proxy doesn't support gRPC compression, but `temporalio`'s Python SDK enables gzip by default. Disable it on the worker client, e.g. `grpc_compression=GrpcCompression.NONE` on `Client.connect`.
 
 Present results as:
 ```

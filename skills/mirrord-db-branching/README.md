@@ -32,6 +32,8 @@ This skill helps AI agents:
 "How do I filter which rows get copied to my database branch?"
 
 "Branch an S3 bucket so my app writes to a throwaway clone"
+
+"Branch a turbopuffer namespace for testing"
 ```
 
 ## Supported databases
@@ -48,6 +50,7 @@ This skill helps AI agents:
 | ClickHouse | `"clickhouse"` | Remote | |
 | Google Spanner | `"spanner"` | Remote (emulator) | uses `SPANNER_EMULATOR_HOST` |
 | Amazon S3 | `"s3"` | Remote (your cloud account) | not a pod; `source.params.bucket`, `provider` |
+| turbopuffer | `"turbopuffer"` | Remote (your turbopuffer account) | not a pod; `source.params.namespace`/`api_key`/`region` |
 | Generic | `"generic"` | Remote | any service, your own image |
 
 ## Quick example

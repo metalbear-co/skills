@@ -3,7 +3,7 @@ name: mirrord-prev-env
 description: Help users create and manage mirrord preview environments — running a modified service as an isolated pod in a shared Kubernetes cluster, scoped by an environment key and HTTP/queue traffic filtering, so teams can validate and review changes against real traffic without affecting live services. Use when a developer wants to run "mirrord preview" ad hoc, share a preview via a link (mirrord-share-ingress), or wire preview environments into CI with the metalbear-co/mirrord-preview GitHub Action (e.g. per-PR previews, least-privilege cluster access).
 metadata:
   author: MetalBear
-  version: "2.5"
+  version: "2.6"
 ---
 
 # Mirrord Preview Environment Skill
@@ -209,7 +209,13 @@ mirrord preview start -t cronjob/nightly-scan -i myrepo/scan:pr-4821 -k pr-4821 
 
 Instead of a Deployment, the operator creates an isolated **CronJob** named after the session — it copies the source CronJob's job settings (concurrency policy, history limits, deadlines, time zone) and pod spec, swaps in your image, and applies the same environment overrides, database branches, and file mounts any other preview gets. The copy is never suspended even when the source is, and the source CronJob is never modified. A preview of a CronJob target consists of the CronJob and the Jobs it creates, with no Service.
 
-Right after creating it, the operator triggers the CronJob once (a Job named `<session>-start`, marked like a `kubectl create job --from=cronjob/...` run) so you see a run immediately rather than waiting for the next scheduled time. After that it runs on its schedule until the session ends; every Job and pod it created is deleted with the session. Set `feature.preview.cronjob.trigger_on_start` to `false` to skip that immediate run, for jobs whose timing matters (a report that must only run in its window, a job that assumes the previous run finished).
+Kubernetes caps CronJob names at 52 characters. When the session name is longer (typically because the source CronJob name itself is long), the preview CronJob gets a shortened name instead: the start of the session name plus the first 8 characters of the session's uid. Find it by its `preview.metalbear.co/session-uid` label (the session and its CronJob live in the same, target's namespace):
+
+```bash
+kubectl get cronjobs -n <namespace> -l preview.metalbear.co/session-uid=$(kubectl get previewsession <session> -n <namespace> -o jsonpath='{.metadata.uid}')
+```
+
+Right after creating it, the operator triggers the CronJob once (a Job named `<cronjob>-start`, marked like a `kubectl create job --from=cronjob/...` run) so you see a run immediately rather than waiting for the next scheduled time. After that it runs on its schedule until the session ends; every Job and pod it created is deleted with the session. Set `feature.preview.cronjob.trigger_on_start` to `false` to skip that immediate run, for jobs whose timing matters (a report that must only run in its window, a job that assumes the previous run finished).
 
 Override the inherited schedule with `feature.preview.cronjob.schedule` (Kubernetes CronJob syntax):
 

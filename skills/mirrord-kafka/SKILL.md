@@ -12,7 +12,7 @@ description: >
   Kafka, or connecting mirrord to a Kafka cluster. This is a Team/Enterprise feature of mirrord.
 metadata:
   author: MetalBear
-  version: "2.5"
+  version: "2.6"
 ---
 
 # mirrord Kafka Splitting Configuration Skill
@@ -202,6 +202,28 @@ Show the developer-facing config referencing the topic IDs. Two filter kinds, an
 ```
 All specified headers must match. An empty `message_filter: {}` with no `jq_filter` is **match-none** (the local app gets zero messages).
 
+**Composable header filter (`filter`) — NEW, alternative to `message_filter`:**
+```json
+{
+  "operator": true,
+  "target": "deployment/<workload>/container/<container>",
+  "feature": {
+    "split_queues": {
+      "<topic-id>": {
+        "queue_type": "Kafka",
+        "filter": {
+          "all_of": [
+            { "metadata": "^tenant: blue$" },
+            { "metadata": "^region: eu-.*$" }
+          ]
+        }
+      }
+    }
+  }
+}
+```
+`filter` takes a single `{ "metadata": "<regex>" }`, or an `any_of`/`all_of` list of them. Each `metadata` regex is matched against every header rendered as `<name>: <value>` — one regex can pin a header by name or match a marker wherever it's propagated. A `message_filter` of `{"tenant": "^blue$"}` is equivalent to `filter: {"metadata": "^tenant: blue$"}`, except `message_filter` requires the header name to match exactly while a `metadata` regex sees the whole `name: value` line. Use either `filter` or `message_filter` on an entry, not both. Requires mirrord **3.264.0+** and operator **3.212.0+**. A `metadata` regex can't be verified against a specific header name, so a topic covered by a `splitQueues` policy rule rejects a lone `metadata` filter the same way it rejects a lone `jq_filter` — use `message_filter` there instead.
+
 **Filter on record content (`jq_filter`) — NEW:**
 ```json
 {
@@ -242,7 +264,7 @@ For topics carrying raw protobuf record values (no JSON envelope, no schema-regi
 
 Notes to convey:
 - `queue_mode` is optional: `steal` (default, only your local app gets a matched message) or `mirror` (both your app and the deployed app get a copy).
-- If both `message_filter` and `jq_filter` are set, **both** must match.
+- If a `filter`/`message_filter` and a `jq_filter` are both set, **both** must match.
 - `jq_filter` requires operator **3.183.0+**, CLI **3.232.0+**, and the **default `librdkafka` client** — it is **not** supported with the Java client (Kafka Streams), which fails with a clear error.
 - For multiple queues (or the same ID on multiple brokers), use the array form with `queue_id` per entry — it also accepts `payload_protobuf` per entry.
 

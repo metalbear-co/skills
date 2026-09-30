@@ -1,9 +1,9 @@
 ---
 name: mirrord-db-branching
-description: Helps users configure mirrord.json for database branching, enabling isolated database copies for safe development and testing. Use when the user wants to set up MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, Amazon S3, or generic branches, configure copy modes, connection sources, schema migrations, IAM authentication, or manage database branches.
+description: Helps users configure mirrord.json for database branching, enabling isolated database copies for safe development and testing. Use when the user wants to set up MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, Amazon S3, turbopuffer, or generic branches, configure copy modes, connection sources, schema migrations, IAM authentication, or manage database branches.
 metadata:
   author: MetalBear
-  version: "2.7"
+  version: "2.8"
 ---
 
 # Mirrord DB Branching Skill
@@ -106,6 +106,7 @@ mirrord verify-config /path/to/config.json
 | ClickHouse | `"clickhouse"` | Remote | empty, schema, all, filtered | |
 | Google Spanner | `"spanner"` | Remote (emulator pod) | empty, schema, all, filtered | uses `SPANNER_EMULATOR_HOST` |
 | Amazon S3 | `"s3"` | Remote (provider — your AWS account) | empty, all, `objects` regex | Not a pod; see [Amazon S3](#amazon-s3) |
+| turbopuffer | `"turbopuffer"` | Remote (provider — your turbopuffer account) | empty, all | Not a pod; see [turbopuffer](#turbopuffer) |
 | Generic | `"generic"` | Remote | none (always empty) | any service, your own image |
 
 ### Shared Configuration Fields
@@ -118,7 +119,7 @@ mirrord verify-config /path/to/config.json
 | `name` | most | Source database name to clone. The override URL becomes `.../<name>`. If omitted, the URL points at the server and the app must select the DB. For **Redis**, `name` is the numeric DB **index** (default `0`). Required when using `migrations`. Not accepted for **S3** — a bucket isn't a server hosting several databases. |
 | `version` | all except generic, s3 | Engine image version (e.g. `"8.0"`, `"16"`). For generic, the tag lives in `image` and `version` is not allowed. Not accepted for S3 — there's no container to run. |
 | `provider` | s3 | Storage service hosting the branch bucket. Only `"AWS"` (default). |
-| `source` | s3 | Where to read the source bucket's name from (`connection` is accepted as an alias). Takes a single param, `bucket`. See [Amazon S3](#amazon-s3). |
+| `source` | s3, turbopuffer | Where to read the source's identity from (`connection` is accepted as an alias). S3 takes a single param, `bucket` — see [Amazon S3](#amazon-s3). turbopuffer takes `namespace`/`api_key`/`region`/`base_url` — see [turbopuffer](#turbopuffer). |
 | `ttl_secs` / `ttl_mins` | all | Branch time-to-live, counted from when no session is using it. Default 5 minutes; **caps at 15 minutes**. The two are mutually exclusive. |
 | `creation_timeout_secs` | all | How long to wait for the branch to become ready. Default 60. Unrecoverable pod failures (e.g. `ImagePullBackOff`, `OOMKilled`) fail immediately instead of waiting. |
 | `copy` | all except generic | How the branch is cloned. See [Copy Modes](#copy-modes). |
@@ -147,12 +148,15 @@ Enable the matching Helm value on the operator chart, and meet the minimum versi
 | ClickHouse | 3.182.0 | 3.230.0 | 3.182.0 | `operator.clickhouseBranching: true` |
 | Google Spanner | 3.182.0 | 3.230.0 | 3.182.0 | `operator.spannerBranching: true` |
 | Amazon S3 | 3.208.0 | 3.252.0 | 3.208.0 | `operator.s3Branching: true` |
+| turbopuffer | 3.212.0 | 3.264.0 | 3.212.0 | `operator.turbopufferBranching: true` |
 | Generic | 3.183.0 | 3.232.0 | 3.183.0 | `operator.genericBranching: true` |
 | Schema migrations | 3.182.0 | 3.230.0 | 3.182.0 | (per engine above) |
 | Schema migrations: inherited target env (`container` flavor) | 3.191.0 | 3.238.0 | 3.191.0 | (per engine above) |
 | Schema migrations: Liquibase (`liquibase` flavor) | 3.207.0 | 3.257.0 | 3.207.0 | (per engine above) |
 | Branch query params (`query_params`, pg only) | 3.197.0 | 3.250.0 | 3.197.0 | `operator.pgBranching: true` |
-| ConfigMap connection source | 3.205.0 | 3.256.0 | 3.205.0 | (per engine above) |
+| ConfigMap connection source | 3.205.0 | 3.255.0 | 3.205.0 | (per engine above) |
+| MySQL/MariaDB copy carries over views, triggers, routines & server settings | 3.210.0 | — | — | (per engine above) |
+| `url` connection param as a base for other params | 3.212.0 | 3.264.0 | 3.212.0 | (per engine above) |
 
 ## Branch Storage & Resources
 
@@ -222,12 +226,35 @@ When the app stores host/port/user/password/database separately:
 
 Each param is individually optional; mirrord fills engine defaults for any not specified. Defaults — host: `localhost` for all; port/user: PostgreSQL `5432`/`postgres`, MySQL `3306`/`root`, MSSQL `1433`/`sa`, MongoDB `27017`/`root`, Redis `6379`/`default`, ClickHouse `9000`/`default`.
 
+### URL as a Base
+
+`params` also accepts a `url` entry: a complete connection URL that every other parameter layers onto. Each component the URL carries (host, port, user, password, database) becomes that parameter's value, and a parameter declared alongside `url` overrides that component. This suits an app that keeps one connection string (often read out of a mounted config file) while credentials come from separate env vars:
+
+```json
+{
+  "connection": {
+    "params": {
+      "url": {
+        "configmap": { "volume": "app-config" },
+        "key": "application.yaml",
+        "value_selector": ".datasource.url",
+        "env_var_name": "APP_DATASOURCE_URL"
+      },
+      "user": "APP_DB_USER",
+      "password": "APP_DB_PASSWORD"
+    }
+  }
+}
+```
+
+`url` accepts the same [Advanced Sources](#advanced-sources) as the other params. Set its `env_var_name` — an app that reads one connection string has no separate host/port setting to redirect, so without it mirrord creates the branch and the app keeps talking to the source database. The branch URL keeps the shape of the source URL: scheme, a `jdbc:` prefix, and query parameters all survive — only the address and database name are replaced. Requires operator/Helm chart **3.212.0+** and CLI **3.264.0+**; an older operator fails the branch up front, an older CLI rejects the config as unknown.
+
 ### Advanced Sources
 
 Any param (and, where noted, the `url`) can be sourced beyond a plain env var:
 
 - **Kubernetes Secret** (params only): `{ "secret": "rds-credentials", "key": "password", "env_var_name": "DB_PASSWORD" }`
-- **ConfigMap** (params only): read a value out of a config file mounted from a ConfigMap, instead of an env var: `{ "configmap": { "volume": "app-config" }, "key": "config.yml", "value_selector": ".database.host", "env_var_name": "DB_HOST" }`. `configmap` is either the ConfigMap's name (`"configmap": "app-config"`) or, preferred when a deployment tool renames the ConfigMap per release, a `configMap` volume of the target pod (`{ "volume": "app-config" }`) — the volume name in the pod spec stays stable even when the ConfigMap it points at changes. `key` is the entry in the ConfigMap's `data` (with the volume form, the file name inside the volume, resolved through any `items` remapping). `value_selector` runs over the entry parsed as JSON/YAML, supporting nested keys (`.database.host`) and `.[]` to iterate — same restrictions as the composite selectors below; `value_pattern` is a regex capture group for entries that aren't JSON/YAML. The two are mutually exclusive; without either, the whole (trimmed) entry is the value. `env_var_name` delivers the value to your local process the same way as other sources. A cluster admin can set the shared `configmap`/`key` once for everyone with `dbPod.sourceConfigMap` on the operator's [branch config profile](https://metalbear.com/mirrord/docs/sharing-the-cluster/db-branching#branch-config-profiles), leaving each param to carry only its own `value_selector` and `env_var_name`. Requires operator/Helm chart **3.205.0+** and CLI **3.256.0+**.
+- **ConfigMap** (params only): read a value out of a config file mounted from a ConfigMap, instead of an env var: `{ "configmap": { "volume": "app-config" }, "key": "config.yml", "value_selector": ".database.host", "env_var_name": "DB_HOST" }`. `configmap` is either the ConfigMap's name (`"configmap": "app-config"`) or, preferred when a deployment tool renames the ConfigMap per release, a `configMap` volume of the target pod (`{ "volume": "app-config" }`) — the volume name in the pod spec stays stable even when the ConfigMap it points at changes. `key` is the entry in the ConfigMap's `data` (with the volume form, the file name inside the volume, resolved through any `items` remapping). `value_selector` runs over the entry parsed as JSON/YAML, supporting nested keys (`.database.host`) and `.[]` to iterate — same restrictions as the composite selectors below; `value_pattern` is a regex capture group for entries that aren't JSON/YAML. The two are mutually exclusive; without either, the whole (trimmed) entry is the value. `env_var_name` delivers the value to your local process the same way as other sources. A cluster admin can set the shared `configmap`/`key` once for everyone with `dbPod.sourceConfigMap` on the operator's [branch config profile](https://metalbear.com/mirrord/docs/sharing-the-cluster/db-branching#branch-config-profiles), leaving each param to carry only its own `value_selector` and `env_var_name`. Requires operator/Helm chart **3.205.0+** and CLI **3.255.0+**.
 - **Google Secret Manager** (url or params; uses the target pod's GKE Workload Identity): url → `{ "type": "gcp_secret_manager", "secret_ref": "projects/../secrets/../versions/latest", "env_var_name": "DATABASE_URL" }`; param → `{ "gcp_secret_manager": "projects/../secrets/../versions/latest", "env_var_name": "DB_PASSWORD" }`
 - **AWS Secrets Manager** (url or params; uses the target pod's service account via IRSA / EKS Pod Identity, the same way [AWS RDS IAM](#iam-authentication) works): url → `{ "type": "aws_secrets_manager", "secret_ref": "arn:aws:secretsmanager:us-east-1:123456789012:secret:db-url", "env_var_name": "DATABASE_URL" }`; param → `{ "aws_secrets_manager": "db-password", "env_var_name": "DB_PASSWORD" }`. `secret_ref` is a secret name or a full ARN; the region comes from the ARN, or from `AWS_REGION`/`AWS_DEFAULT_REGION` on the target pod for a plain name. Not supported for [generic branches](#generic-branches).
   - `env_var_name` is normally optional on these three sources, but becomes **required** when the connection is used by a `container`-flavor [migration](#schema-migrations) Job — the operator needs a variable name to redirect the branch connection into the Job's inherited environment. Without it, the migration fails.
@@ -275,6 +302,10 @@ Cluster admins can set the same overrides for everyone via `pgBranchConfig.dbPod
 | `"empty"` (default) | Nothing — empty DB | For apps that run migrations / init schema on startup |
 | `"schema"` | Table structures only, no data | Not available for MongoDB, Redis, DynamoDB |
 | `"all"` | Schema **and** all data | **Small DBs only** — large copies are slow and storage-heavy |
+
+### What MySQL/MariaDB copy carries over
+
+Requires operator **3.210.0+** (earlier operators copy tables and data only, and start the branch server on the image's own settings). In `schema` and `all` modes the branch also gets the source's views, triggers, stored functions and stored procedures. Every copied object is owned by the branch's `root` user — the source's `DEFINER` is dropped, since that account doesn't exist on the branch. The copy runs as the declared connection user: a routine the connection user didn't define itself needs `SHOW_ROUTINE`/`SHOW CREATE ROUTINE` or the global `SELECT` privilege on the source, or `mysqldump`/`mariadb-dump` leaves it out with an `insufficient privileges` comment (`EXECUTE` alone isn't enough). The branch server also starts with the source's `sql_mode`, `character_set_server`, `collation_server`, `time_zone`, `group_concat_max_len`, `explicit_defaults_for_timestamp` and transaction isolation (a cluster admin's `dbServerArgs` still take precedence) — keep the branch `version` on the source's major version, since an incompatible `sql_mode` flag can stop the branch server from starting.
 
 ### Filtered clone (SQL engines: MySQL, MariaDB, PostgreSQL, MSSQL, ClickHouse, Spanner)
 
@@ -508,6 +539,35 @@ Unlike every other engine, an S3 branch is **not a pod**: the operator has the s
 
 If the operator doesn't support S3 branching, the session fails immediately: an older operator reports `mirrord operator <version> does not support feature S3 branching`, and one where the Helm value is off reports `feature S3 branching is not enabled on this mirrord operator`.
 
+## turbopuffer
+
+Like S3, a [turbopuffer](https://turbopuffer.com) branch is **not a pod**: the operator asks turbopuffer to branch your source namespace into a copy-on-write clone in your own turbopuffer account, and points the target at the clone. There's no `image`, `version`, `profile`, or migrations.
+
+```json
+{
+  "feature": { "db_branches": [ {
+    "id": "docs-turbopuffer",
+    "type": "turbopuffer",
+    "source": {
+      "params": {
+        "namespace": "TPUF_NAMESPACE",
+        "api_key": "TURBOPUFFER_API_KEY",
+        "region": "TURBOPUFFER_REGION"
+      }
+    },
+    "copy": { "mode": "all" }
+  } ] }
+}
+```
+
+- `source` (alias `connection`): turbopuffer clients pick the namespace per request, so mirrord can only redirect an app that reads the namespace name from an env var. Params: `namespace` (required, **must** name an env var — it's the one the session rewrites), `api_key` (required, the key the operator branches and later deletes the namespace with), and one of `region` (e.g. `gcp-us-central1`) or `base_url` (full API endpoint for a dedicated cluster). Same value sources as other engines (env var, Secret, regex, literal) — but since there's no branch pod, a Secret-Manager-backed param must be readable by the **operator**, not just the target's service account.
+- The operator refuses any `base_url`/dedicated-cluster host outside `turbopuffer.com`; a cluster admin allowlists other domains via the Helm chart's `operator.turbopufferOptions.allowedHosts`.
+- `copy.mode`: `"empty"` (default) reserves a fresh namespace name that turbopuffer creates on first write; `"all"` is an instant copy-on-write clone of every document and the schema — costs no copy time or cluster bandwidth, but turbopuffer bills each branch operation at a flat rate.
+- Cleanup: the branch namespace is deleted when the branch expires or is destroyed; the operator keeps the API key needed for that deletion in a Secret in its own namespace.
+- Limitations: whole namespaces only (no row/document filter), and an app that computes its namespace name at runtime (e.g. per-tenant) can't be redirected, since only a single env var is rewritten.
+
+Requires operator/Helm chart **3.212.0+** and CLI **3.264.0+**, with the Helm chart's `operator.turbopufferBranching: true`.
+
 ## Generic Branches
 
 For any stateful service mirrord has no built-in engine for (InfluxDB, Valkey, Cassandra, an internal service, …). A generic branch runs **your container image** and starts **empty by default** — no built-in copy modes, no IAM, a single redirected port. Prefer a first-class engine when one exists. When an empty branch isn't useful, add a [`copy` Job](#copying-data-into-the-branch) to populate it, or reference an admin [`profile`](#admin-profiles) that supplies one.
@@ -618,6 +678,8 @@ mirrord db-branches connections
 | Filters silently dropped | Table/collection filters are incompatible with `"mode": "all"` |
 | S3 branch rejects a field | `version`/`image`/`location`/`profile`/`migrations`/`iam_auth`/`name` don't apply to S3 — see [Amazon S3](#amazon-s3) |
 | S3 branch config error on a connection param | S3 only accepts the `bucket` param under `source`/`connection`; any other param (`host`, `port`, …) is rejected |
+| turbopuffer branch rejects a dedicated-cluster `base_url` | The operator only allows hosts on `turbopuffer.com` by default; a cluster admin must add the domain to `operator.turbopufferOptions.allowedHosts` |
+| turbopuffer branch doesn't redirect the app | `namespace` must name an env var (not a Secret without `env_var_name`) — it's the only thing the session rewrites; an app that computes its namespace at runtime can't be redirected |
 | `migrations` rejected | `name` must be set, and the engine must be MySQL/MariaDB/PostgreSQL/MSSQL |
 | `container` migration fails re: connection variables | A `connection` via `secret`/`gcp_secret_manager`/`aws_secrets_manager` needs `env_var_name` set so the operator can redirect it into the migration Job's environment |
 | Generic branch never ready | Use an `http_get`/`exec` readiness probe; plain TCP can pass before the service is usable |
@@ -766,6 +828,24 @@ Otherwise, provide safe defaults and note assumptions.
     "type": "s3",
     "source": { "params": { "bucket": "UPLOADS_BUCKET" } },
     "copy": { "mode": "all", "objects": ["^fixtures/"] }
+  } ] }
+}
+```
+
+### turbopuffer namespace branch with a full clone
+```json
+{
+  "feature": { "db_branches": [ {
+    "id": "docs-turbopuffer",
+    "type": "turbopuffer",
+    "source": {
+      "params": {
+        "namespace": "TPUF_NAMESPACE",
+        "api_key": "TURBOPUFFER_API_KEY",
+        "region": "TURBOPUFFER_REGION"
+      }
+    },
+    "copy": { "mode": "all" }
   } ] }
 }
 ```
