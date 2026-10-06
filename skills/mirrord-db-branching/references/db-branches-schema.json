@@ -845,6 +845,49 @@
           "description": "When configuring a branch for PostgreSQL, set `type` to `pg`.",
           "type": "object",
           "properties": {
+            "additional_databases": {
+              "title": "feature.db_branches[].additional_databases (type: pg) {#feature-db_branches-pg-additional_databases}",
+              "description": "More databases from the same source PostgreSQL server, copied into the same branch\npod alongside this branch's own database. Each entry's `name` must be unique, differ\nfrom this branch's own `name`, fit PostgreSQL's 63-byte identifier limit, and not be a\ntemplate database (`template0`/`template1`). Every database is read over this branch's\nown source connection - same host, port, user, password, TLS settings, `iam_auth` and\n`connection_settings` - only the database name differs.\n\nBranches are reused by `id` only when the additional databases' names and connections\nalso match; their `copy` is not part of that match.\n\nRequires operator and Helm chart 3.214.0+ and mirrord CLI 3.267.0+. An operator that\ndoes not support this refuses the config instead of creating a branch without the\nextra databases.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "description": "Database name on the source server. The branch creates a database with the same\nname.",
+                    "type": "string"
+                  },
+                  "connection": {
+                    "description": "How the application connects to this database, in the same shape as the branch's\nown `connection`. mirrord points it at the branch pod with this database's name.\nWithout it, the database is only created and copied - the application has to\nswitch to it on the branch host by itself.",
+                    "anyOf": [
+                      {
+                        "$ref": "#/definitions/DbBranchingConnectionSource"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "copy": {
+                    "description": "Copy mode and table filters for this database, in the same shape as the branch's\nown `copy`. Defaults to `empty`.",
+                    "anyOf": [
+                      {
+                        "$ref": "#/definitions/PgBranchCopyConfig"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ]
+              }
+            },
             "connection": {
               "description": "How to source the connection info for the source database. The operator swaps it for\nthe branch's connection once the branch is ready.",
               "$ref": "#/definitions/DbBranchingConnectionSource"

@@ -103,13 +103,15 @@ def callback(message):
         context.detach(token)
 ```
 
-Notification **attributes** (`bucketId`, `objectId`, `eventType`, ...) never include custom metadata, so a `message_filter` on `baggage` can't match. Filter on the payload:
+Notification **attributes** (`bucketId`, `objectId`, `eventType`, ...) never include custom metadata, so a `message_filter` on `baggage` can't match. Filter on the object's metadata instead:
+
+**mirrord queue splitting** — on the queue's `queueConfig` `MirrordPropertyList`, set `gcs_event: "true"` (operator 3.214.0+); the operator then exposes the notification's object custom metadata as `gcsMetadata`. With a `JSON_API_V1` payload it reads `metadata` off the message data directly; with `NONE` it fetches the object's metadata from Cloud Storage itself (needs `storage.objects.get` on the bucket for the client config's identity — grant it if the consumer's service account lacks it), so this also covers the `NONE` case the in-process consumer above can't:
 
 ```json
 "split_queues": {
   "uploads-sub": {
     "queue_type": "GCPPubSub",
-    "jq_filter": ".data | @base64d | fromjson | .metadata.baggage // \"\" | test(\"mirrord-session=alice\")"
+    "jq_filter": ".gcsMetadata.baggage // \"\" | test(\"mirrord-session=alice\")"
   }
 }
 ```
