@@ -3,7 +3,7 @@ name: mirrord-db-branching
 description: Helps users configure mirrord.json for database branching, enabling isolated database copies for safe development and testing. Use when the user wants to set up MySQL, MariaDB, PostgreSQL, MSSQL, MongoDB, Redis, DynamoDB, ClickHouse, Google Spanner, Amazon S3, turbopuffer, or generic branches, configure copy modes, connection sources, schema migrations, IAM authentication, or manage database branches.
 metadata:
   author: MetalBear
-  version: "2.8"
+  version: "2.9"
 ---
 
 # Mirrord DB Branching Skill
@@ -115,7 +115,7 @@ mirrord verify-config /path/to/config.json
 |-------|-----------|-------------|
 | `type` | all | Database engine (see table above). |
 | `connection` | all (optional for DynamoDB) | How mirrord locates the source connection details. See [Connection Modes](#connection-modes). |
-| `id` | all | Reuse/share a branch: same `id` reattaches to an existing branch while its TTL hasn't expired. Use a unique value (e.g. a UUID) to avoid reusing someone else's branch. Ignored for local Redis. |
+| `id` | all | Reuse/share a branch: same `id` reattaches to an existing branch while its TTL hasn't expired. Use a unique value (e.g. a UUID) to avoid reusing someone else's branch. Give two entries of the same `type` their own `id`s — from CLI **3.267.0+**, entries that would resolve to the same branch make mirrord refuse to start the session instead of silently colliding. All `generic` entries count as one type for this check. Ignored for local Redis. |
 | `name` | most | Source database name to clone. The override URL becomes `.../<name>`. If omitted, the URL points at the server and the app must select the DB. For **Redis**, `name` is the numeric DB **index** (default `0`). Required when using `migrations`. Not accepted for **S3** — a bucket isn't a server hosting several databases. |
 | `version` | all except generic, s3 | Engine image version (e.g. `"8.0"`, `"16"`). For generic, the tag lives in `image` and `version` is not allowed. Not accepted for S3 — there's no container to run. |
 | `provider` | s3 | Storage service hosting the branch bucket. Only `"AWS"` (default). |
@@ -127,6 +127,7 @@ mirrord verify-config /path/to/config.json
 | `migrations` | mysql, mariadb, pg, mssql | Run schema migrations on the branch at creation. See [Schema Migrations](#schema-migrations). |
 | `connection_settings` | pg | PostgreSQL session settings applied while reading the source (e.g. for RLS). |
 | `query_params` | pg | Query parameters on the **branch** connection the app receives (e.g. `sslmode`). See [Branch Query Parameters](#branch-query-parameters-postgresql). |
+| `additional_databases` | pg | More databases from the same source server, copied into the same branch pod alongside the branch's own database. See [Several Databases in One Branch](#several-databases-in-one-branch-postgresql). |
 | `emulator_host` | spanner | Name of the env var mirrord sets to the emulator address (default `SPANNER_EMULATOR_HOST`). |
 | `location` | redis | `"remote"` (default) or `"local"`. |
 | `local` | redis | Local Redis runtime config (see [Redis](#redis)). |
@@ -154,6 +155,8 @@ Enable the matching Helm value on the operator chart, and meet the minimum versi
 | Schema migrations: inherited target env (`container` flavor) | 3.191.0 | 3.238.0 | 3.191.0 | (per engine above) |
 | Schema migrations: Liquibase (`liquibase` flavor) | 3.207.0 | 3.257.0 | 3.207.0 | (per engine above) |
 | Branch query params (`query_params`, pg only) | 3.197.0 | 3.250.0 | 3.197.0 | `operator.pgBranching: true` |
+| `additional_databases` (pg only) | 3.214.0 | 3.267.0 | 3.214.0 | `operator.pgBranching: true` |
+| Branch pod inherits target's `imagePullSecrets` for a custom `image` | 3.216.0 | — | 3.216.0 | (per engine above) |
 | ConfigMap connection source | 3.205.0 | 3.255.0 | 3.205.0 | (per engine above) |
 | MySQL/MariaDB copy carries over views, triggers, routines & server settings | 3.210.0 | — | — | (per engine above) |
 | `url` connection param as a base for other params | 3.212.0 | 3.264.0 | 3.212.0 | (per engine above) |
@@ -292,6 +295,39 @@ To override the automatic values or add other driver parameters, set `query_para
 Cluster admins can set the same overrides for everyone via `pgBranchConfig.dbPod.queryParams` in the operator Helm values, or on a branch config `profile`. Layers merge per key: mirrord's derived default, then the admin's `queryParams`, then the session's own `query_params` — each layer overrides the previous one only for the keys it sets.
 
 `query_params` only affects the branch connection; the copy connection to the source keeps the source's own parameters. Requires operator/Helm chart **3.197.0+** and CLI **3.250.0+** — on older operators, a branch that sets `query_params` (or an `sslmode` connection param) fails with a clear error instead of being silently ignored.
+
+### Several Databases in One Branch (PostgreSQL)
+
+`additional_databases` copies more databases from the same source **PostgreSQL** server into the same branch pod — useful when the app talks to several databases on one server, so they all keep using a single host on the branch, the same as against the source:
+
+```json
+{
+  "type": "pg",
+  "name": "app",
+  "connection": { "url": { "type": "env", "variable": "DATABASE_URL" } },
+  "copy": { "mode": "all" },
+  "additional_databases": [
+    {
+      "name": "analytics",
+      "connection": { "url": { "type": "env", "variable": "ANALYTICS_DATABASE_URL" } },
+      "copy": { "mode": "schema", "tables": { "events": { "filter": "created_at > now() - interval '1 day'" } } }
+    },
+    { "name": "audit" }
+  ]
+}
+```
+
+Each entry takes:
+
+| Field | Required | Description |
+|-------|----------|--------------|
+| `name` | yes | Database name on the source server; the branch creates a database with the same name. Must be unique, differ from the branch's own `name`, fit PostgreSQL's 63-byte identifier limit, and not be `template0`/`template1`. |
+| `connection` | no | Same shape as the branch's own `connection`; mirrord points it at the branch pod with this database's name. Without it, the database is only created and copied — the app has to switch to it on the branch host itself. Needs its own URL or database variable (a URL can only name one database); host/port/user/password variables may be shared across entries since every database lives on the same branch pod. |
+| `copy` | no | Same shape as the branch's own `copy`. Defaults to `empty`. |
+
+Every additional database is read over the branch's own source connection — same host, port, user, password, TLS settings, `iam_auth`, and `connection_settings` — only the database name differs, so all of them must live on the server the branch's `connection` points at. With `dbPod.roles: full`, only the branch's own connection user gets a login on the branch; an additional connection sharing the same user/password variables keeps them, one with its own user/password variables is pointed at the branch superuser instead — sharing only one of the two is rejected. Branches are reused by `id` only when the additional databases' names and connections also match; their `copy` is not part of that match, so a reused branch keeps the data it was first copied with.
+
+Requires operator and Helm chart **3.214.0+** and CLI **3.267.0+**; an operator that doesn't support it refuses the config rather than creating a branch without the extra databases.
 
 ## Copy Modes
 
@@ -583,6 +619,8 @@ You declare the params your service needs under `connection.params` (the fixed s
 | `readiness` | No | Readiness probe. Defaults to a TCP probe on `port`. |
 | `copy` | No | One-shot Job that populates the branch before it turns Ready. See [Copying Data into the Branch](#copying-data-into-the-branch). |
 | `profile` | No | Name of an admin-defined profile supplying branch defaults and/or a `copy` Job. See [Admin Profiles](#admin-profiles). |
+
+With operator **3.216.0+**, a branch `image` in a private registry is pulled with the target's `imagePullSecrets` automatically. For a registry the target has no pull secret for, or on older operators, a cluster admin sets `imagePullSecrets` in the generic branch config.
 
 Readiness types: `{ "type": "tcp" }` (default), `{ "type": "http_get", "path": "/health", "port": 8086 }`, `{ "type": "exec", "command": ["redis-cli", "ping"] }`. Prefer a probe that proves the service is *usable*, not just that the process started.
 

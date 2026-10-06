@@ -3,7 +3,7 @@ name: mirrord-prev-env
 description: Help users create and manage mirrord preview environments — running a modified service as an isolated pod in a shared Kubernetes cluster, scoped by an environment key and HTTP/queue traffic filtering, so teams can validate and review changes against real traffic without affecting live services. Use when a developer wants to run "mirrord preview" ad hoc, share a preview via a link (mirrord-share-ingress), or wire preview environments into CI with the metalbear-co/mirrord-preview GitHub Action (e.g. per-PR previews, least-privilege cluster access).
 metadata:
   author: MetalBear
-  version: "2.6"
+  version: "2.7"
 ---
 
 # Mirrord Preview Environment Skill
@@ -67,11 +67,10 @@ Preview environments **deploy an image into a shared cluster and route live traf
 | **Cluster access** | A valid kubeconfig reachable from wherever you run preview (laptop or CI runner). |
 | **A built, pushed image** | Preview deploys an *image*, not local source. The preview pod is a copy of the **target's pod spec with the image swapped**, so it pulls with the **same credentials as the target** — there is no separate registry config for previews. Push the preview tag to the **same registry and repository the target already pulls from**, or it fails with `ErrImagePull`. |
 
-Enable the feature in the operator's Helm values:
+`operator.previewEnv` must be `true` in the operator's Helm values. Recent chart versions default it to `true`; older chart versions default to `false`, so set it explicitly when installing one of those:
 
 ```yaml
 operator:
-  # Has to be set to `true` in order to use the preview environments feature.
   previewEnv: true
 ```
 
@@ -464,7 +463,7 @@ The typical flow: on PR open/push, CI builds the image(s), pushes to a registry,
 
 | Issue | Solution |
 |-------|----------|
-| Preview feature unavailable / operator error | Need Operator 3.142.0+ with `operator.previewEnv: true`, CLI 3.189.0+, and the **Enterprise** plan. See `mirrord-operator` skill. |
+| Preview feature unavailable / operator error | Need Operator 3.142.0+ with `operator.previewEnv: true` (default on recent chart versions, but must be set explicitly on older ones), CLI 3.189.0+, and the **Enterprise** plan. See `mirrord-operator` skill. |
 | Traffic never reaches the preview pod | Check the `header_filter` regex matches the header you send, the env key matches, and that intermediate services **propagate the header** on outgoing calls. On a service mesh other than Istio/Linkerd, the sidecar may be rejecting the operator's inbound connection — see [Service meshes](#how-preview-environments-work). |
 | `ErrImagePull` / `401 Unauthorized` on the preview pod | The preview pulls with the **target's** credentials (no separate registry config). Push the preview tag to the same registry and repository the target already pulls from. Common trap: a brand-new `ghcr.io` package created by a workflow's `GITHUB_TOKEN` starts **private**. |
 | `preview start` refuses — session already exists | A previous run's session for that key+target is still alive. Pass `--force` to replace it. |

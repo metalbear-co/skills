@@ -55,7 +55,7 @@ mirrord preview stop --key pr-123
 
 ## Prerequisites
 
-- mirrord **Operator 3.142.0+** deployed with `operator.previewEnv: true`
+- mirrord **Operator 3.142.0+** deployed with `operator.previewEnv: true` (default on recent chart versions; set it explicitly on older ones)
 - mirrord **CLI 3.189.0+** (the Action installs the latest automatically)
 - **Enterprise** plan (a free trial is minted as Enterprise; an agent with no license can start one itself — see the `mirrord-operator` skill)
 - Reachable kubeconfig (laptop or CI runner)

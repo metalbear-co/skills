@@ -7,7 +7,7 @@ description: >
   or managing multiple mirrord sessions' lifecycle in one command.
 metadata:
   author: MetalBear
-  version: "1.5"
+  version: "1.6"
 ---
 
 # mirrord up Skill
@@ -223,7 +223,7 @@ The Kubernetes context to run this service in. See [Context](#context) above for
 
 ### Queue Splitting
 
-`mirrord up` supports queue splitting automatically for **every** service, in `split`, `replace`, and `mirror` mode — there is no dedicated `services.*.messages` field in `mirrord-up.yaml`. Instead:
+`mirrord up` supports queue splitting automatically for every service in `split` and `mirror` mode — there is no dedicated `services.*.messages` field in `mirrord-up.yaml`. Instead:
 
 1. Set up queue splitting for the target and enable the relevant queue-splitting feature in the mirrord operator, per the target's `MirrordSplitConfig` (see the Queue Splitting guide, linked from the official docs).
 2. Start `mirrord up` with a session key, e.g. `mirrord up --key checkout-debug`.
@@ -234,6 +234,8 @@ Supported brokers: Kafka, Amazon SQS, RabbitMQ, Google Cloud Pub/Sub, Azure Serv
 > RabbitMQ splitting in `mirrord up` requires an operator that supports it. Against an older operator the session still runs, with RabbitMQ splitting disabled and a warning printed for the affected service.
 
 Only messages containing the session key are routed to the local session; all other messages continue to the deployed target.
+
+A service in **`replace` mode doesn't use queue splitting**: the deployed workload is scaled down, so the local process consumes every message from its queues directly instead.
 
 #### `services.*.run`
 
@@ -300,7 +302,7 @@ Workload inference and cluster prompts happen later when running `mirrord up`, n
 
 | Issue | Guidance |
 |-------|----------|
-| Want queue splitting in `mirrord-up.yaml` | No config-file field needed — it's automatic (`split`, `replace`, and `mirror` modes all) once `MirrordSplitConfig` + the operator feature are set up and the session runs with a `--key`. Kafka, Amazon SQS, RabbitMQ, Google Cloud Pub/Sub, Azure Service Bus, Redis Pub/Sub, Temporal, and BullMQ are supported; RabbitMQ splitting needs an operator that supports it, otherwise the session still runs with RabbitMQ splitting disabled and a warning |
+| Want queue splitting in `mirrord-up.yaml` | No config-file field needed — it's automatic for services in `split` or `mirror` mode once `MirrordSplitConfig` + the operator feature are set up and the session runs with a `--key`. Kafka, Amazon SQS, RabbitMQ, Google Cloud Pub/Sub, Azure Service Bus, Redis Pub/Sub, Temporal, and BullMQ are supported; RabbitMQ splitting needs an operator that supports it, otherwise the session still runs with RabbitMQ splitting disabled and a warning. `replace` mode doesn't use queue splitting — the deployed workload is scaled down, so the local process consumes everything itself |
 | Need a `mirrord.json` option not exposed as a `mirrord-up.yaml` field | Use `services.*.config_patch` to deep-merge raw `mirrord.json` under that service |
 | Traffic isolation | Default split filter uses session key; set `--key` / `MIRRORD_KEY` and/or explicit `http_filter` when sharing a cluster |
 | Considering `replace` mode | It scales the real workload to zero for **everyone** for the session's duration; only suggest it on non-shared clusters/environments, and confirm the target is a deployment/statefulset/replicaset |
@@ -312,7 +314,7 @@ Workload inference and cluster prompts happen later when running `mirrord up`, n
 1. Prefer **`mirrord up init`** for new users; hand-edit YAML for known stacks.
 2. Stay within documented fields only — do not invent keys beyond the official page.
 3. Default to **`split`** mode in examples; only suggest `replace` (or `--mode replace`) when the user explicitly wants full local takeover of a service, and pair it with the shared-cluster warning. Suggest `mirror` when they want to observe traffic without affecting the deployed service.
-4. Queue splitting (including RabbitMQ) works automatically for supported brokers, no `mirrord-up.yaml` field required — note that RabbitMQ splitting needs an operator version that supports it.
+4. Queue splitting (including RabbitMQ) works automatically for supported brokers in `split`/`mirror` mode, no `mirrord-up.yaml` field required — note that RabbitMQ splitting needs an operator version that supports it, and that `replace` mode doesn't use queue splitting at all.
 5. For single-process or `mirrord.json`-only work, point them to **mirrord-config** / **mirrord-quickstart**; this skill is multi-service compose via `mirrord up`.
 6. For operator / Teams concurrent use on the cluster side, use **mirrord-operator** when relevant (`common.operator`).
 
