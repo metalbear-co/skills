@@ -57,3 +57,7 @@ build/
 # Coverage
 coverage/
 .nyc_output/
+
+# Tessl agent local state
+.tessl/memory/
+.tessl-plugin/
