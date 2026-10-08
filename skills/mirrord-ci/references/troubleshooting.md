@@ -26,7 +26,7 @@ When executing a task Turbo strips most of the existing process environment, inc
 
 1. Explicitly tell Turbo to pass mirrord environment to the task. To do this, merge the snippet below into your `turbo.json`. You should be able to run the task like `mirrord exec turbo dev`.
 
-```json
+```json other
 {
   "globalPassThroughEnv": ["MIRRORD_*", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES"]
 }
@@ -42,7 +42,7 @@ This could happen because the local process is listening on a different port tha
 
 This can happen in some clusters using a service mesh when stealing incoming traffic. You can use this configuration to fix it:
 
-```json
+```json mirrord
 {"agent": {"flush_connections": false}}
 ```
 
@@ -92,7 +92,7 @@ kubectl delete jobs --selector=app=mirrord --field-selector=status.successful=1
 
 If your cluster is running on Bottlerocket or has SELinux enabled, please try enabling the `privileged` flag in the agent configuration:
 
-```json
+```json mirrord
 {
   "agent": {
     "privileged": true
@@ -110,7 +110,7 @@ When running processes locally versus in a container within Kubernetes, some lan
 
 To work around this issue (on macOS), you can use the following mirrord configuration:
 
-```json
+```json mirrord
 {
    "experimental": {"trust_any_certificate": true}
 }
@@ -132,7 +132,7 @@ If your Next.js app is managed by Nx and uses a custom server, the local process
 
 To fix this, use `feature.env.exclude` to prevent mirrord from importing these specific variables:
 
-```json
+```json mirrord
 {
   "feature": {
     "env": {
@@ -149,7 +149,7 @@ To fix this, use `feature.env.exclude` to prevent mirrord from importing these s
 
 Remix and Vite use the `NODE_ENV` environment variable to determine the runtime configuration. To ensure consistent behavior, you can override the remote `NODE_ENV` value:
 
-```json
+```json mirrord
 {
   "feature": {
     "env": {

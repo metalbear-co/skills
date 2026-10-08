@@ -73,7 +73,7 @@ mirrord up -f mirrord-up-custom.yaml
 
 ## Getting started (official minimal example)
 
-```yaml
+```yaml mirrord-up
 services:
   user-auth-service:
     run:
@@ -94,7 +94,7 @@ You may omit `target.path` (or the whole `target`); `mirrord up` can infer the t
 
 Set per service with `default_mode` in the config file, or for the whole run with `-m`/`--mode` (overrides every service's `default_mode`).
 
-```yaml
+```yaml mirrord-up
 services:
   user-auth-service:
     default_mode: replace
@@ -118,7 +118,7 @@ services:
 
 `mirrord up` can run each service against a different Kubernetes context. Set it via the `--context` flag, or `context` in the config file (`common.context` for all services, `services.*.context` to override a specific one).
 
-```yaml
+```yaml mirrord-up
 common:
   context: kind
 services:
@@ -168,23 +168,23 @@ Omitting `target` entirely is equivalent to an empty mapping: path is inferred f
 
 Examples from the docs:
 
-```yaml
+```yaml mirrord-up=services.*
 target:
   path: deployment/test-app
   namespace: test-namespace
 ```
 
-```yaml
+```yaml mirrord-up=services.*
 target:
   path: deployment/test-app
 ```
 
-```yaml
+```yaml mirrord-up=services.*
 target:
   namespace: test-namespace
 ```
 
-```yaml
+```yaml mirrord-up=services.*
 target: none
 ```
 
@@ -208,7 +208,7 @@ Maps to `feature.network.incoming.ignore_ports`.
 
 Escape hatch for `mirrord.json` options not yet exposed as dedicated `mirrord-up.yaml` fields. Deep-merged into the service's generated config. Prefer the dedicated fields above whenever one exists.
 
-```yaml
+```yaml mirrord-up=services.*
 config_patch:
   feature:
     split_queues:
@@ -242,13 +242,13 @@ A service in **`replace` mode doesn't use queue splitting**: the deployed worklo
 - `command`: array of strings (binary + args)
 - `type`: `exec` or `container` (default `exec`) — runs via `mirrord exec` or `mirrord container`
 
-```yaml
+```yaml mirrord-up=services.*
 run:
   type: container
   command: ["docker", "run", "my-app"]
 ```
 
-```yaml
+```yaml mirrord-up=services.*
 run:
   command: ["node", "app.js"]
 ```
@@ -262,7 +262,7 @@ The whole `mirrord-up.yaml` file is rendered with [Tera](https://keats.github.io
 
 Useful for injecting the session key into env var overrides or commands, or pulling per-developer config (namespace, tokens) from the environment instead of hardcoding it:
 
-```yaml
+```yaml mirrord-up
 services:
   my-service:
     target:

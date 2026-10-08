@@ -41,7 +41,7 @@ mirrord up init
 mirrord up
 ```
 
-```yaml
+```yaml mirrord-up
 services:
   user-auth-service:
     run:

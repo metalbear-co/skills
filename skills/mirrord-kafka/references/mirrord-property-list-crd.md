@@ -60,7 +60,7 @@ This keeps older setups working while you migrate.
 
 ### Plaintext (dev)
 
-```yaml
+```yaml crd
 apiVersion: mirrord.metalbear.co/v1
 kind: MirrordPropertyList
 metadata:
@@ -76,7 +76,7 @@ spec:
 
 ### AWS MSK IAM
 
-```yaml
+```yaml crd
 spec:
   properties:
     - name: bootstrap.servers
@@ -93,7 +93,7 @@ When `mirrord.auth.kind: MSK_IAM`, the operator automatically adds `sasl.mechani
 
 Never inline PEM key material or passwords. Store them in a Secret and reference with `valueFrom.secretKeyRef`:
 
-```yaml
+```yaml crd
 spec:
   properties:
     - name: bootstrap.servers
@@ -121,7 +121,7 @@ spec:
 
 ### Kafka Streams (Java client)
 
-```yaml
+```yaml crd
 spec:
   properties:
     - name: bootstrap.servers
@@ -138,7 +138,7 @@ Some client libraries — KafkaJS, for example — advertise their own partition
 
 Set `mirrord.temporary_group_id: "true"` on the Kafka `MirrordPropertyList`:
 
-```yaml
+```yaml crd
 spec:
   properties:
     - name: bootstrap.servers
@@ -151,7 +151,7 @@ With this set, splits patch the workload's consumer-group env vars (`appConfig.g
 
 The operator can only join the original group once every pod of the previous generation has left it, so the split waits for the workload's rollout to finish — 180 seconds by default, then the session fails. For a slower rollout (many replicas, a long termination grace period, a consumer that stays in the group until its session timeout expires), raise the wait with `mirrord.group_join_timeout`, in seconds:
 
-```yaml
+```yaml crd
 spec:
   properties:
     - name: mirrord.temporary_group_id
@@ -168,7 +168,7 @@ By default, the operator creates temporary (split) topics with a replication fac
 
 Set `mirrord.split_topic.replication_factor` on the Kafka `MirrordPropertyList` to control the factor. Requires operator **3.191.0+**; earlier operators reject it as an unknown `mirrord.` key.
 
-```yaml
+```yaml crd
 spec:
   properties:
     - name: bootstrap.servers
@@ -208,7 +208,7 @@ kubectl create secret generic kafka-stores --namespace meme \
 
 Reference the secret keys from the `MirrordPropertyList`:
 
-```yaml
+```yaml crd
 apiVersion: mirrord.metalbear.co/v1
 kind: MirrordPropertyList
 metadata:

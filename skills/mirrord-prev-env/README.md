@@ -42,7 +42,7 @@ mirrord preview logs --key pr-123   # what the preview's pods wrote (requires mi
 mirrord preview stop --key pr-123
 ```
 
-```yaml
+```yaml workflow
 # CI
 - uses: metalbear-co/mirrord-preview@main
   with:
