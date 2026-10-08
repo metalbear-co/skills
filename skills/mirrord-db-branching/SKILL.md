@@ -42,14 +42,12 @@ Authoritative docs (fetch sub-pages for engine-specific detail):
 ## Critical First Steps
 
 **Step 0: Load References**
-Read the reference files from this skill's `references/` directory:
-- `references/db-branches-schema.json` — authoritative JSON Schema for `db_branches` (extracted from the mirrord schema). Config lives under `feature.db_branches`.
-- `references/troubleshooting.md` — common issues and solutions
+Read the reference file from this skill's `references/` directory:
+- `references/troubleshooting.md`: common issues and solutions
 
-The schema is derived from the official mirrord schema at:
-https://raw.githubusercontent.com/metalbear-co/mirrord/main/mirrord-schema.json
+Config lives under `feature.db_branches`. To look up a field, call `explain_config_option` if the mirrord MCP server is connected; otherwise use `references/configuration.md` in the mirrord-config skill.
 
-If using absolute paths, search for the schema using patterns like `**/mirrord-db-branching/references/*`.
+If using absolute paths, search for it using patterns like `**/mirrord-db-branching/references/*`.
 
 **Step 1: Verify Prerequisites**
 Each engine has minimum operator, mirrord CLI, and Helm chart versions, and a per-engine Helm value that must be enabled. See [Version Requirements](#version-requirements) below. DB branching needs the operator with a Teams/Enterprise license; on a cluster with no license, an AI agent can offer the user a seven-day Enterprise trial and start it once they agree (see the `mirrord-operator` skill, "Agent-started trial").
@@ -58,7 +56,7 @@ Each engine has minimum operator, mirrord CLI, and Helm chart versions, and a pe
 The app must read its DB connection from environment variables (or Kubernetes Secrets). mirrord overrides those variables with the branch's connection details for the session. Confirm the exact variable name(s) the app uses.
 
 **Step 3: Validate Configuration**
-After generating any config, ALWAYS run:
+After generating any config, ALWAYS validate it. If the mirrord MCP server is connected, call `validate_config` on the config; otherwise save it to a file and run:
 ```bash
 mirrord verify-config /path/to/config.json
 ```
@@ -897,4 +895,4 @@ Otherwise, provide safe defaults and note assumptions.
 - **Correct type**: Use the exact engine `type` string.
 - **Safe defaults**: Default to `"empty"` copy mode to avoid long creation times.
 - **No inline secrets**: Reference env vars / Secrets / Secret Manager; never invent credential values.
-- **Actionable feedback**: Explain what each field does when relevant, and always run `mirrord verify-config`.
+- **Actionable feedback**: Explain what each field does when relevant, and always validate: `validate_config` when the mirrord MCP server is connected, otherwise `mirrord verify-config`.

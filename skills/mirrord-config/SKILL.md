@@ -26,23 +26,18 @@ Generate and validate `mirrord.json` configuration files:
 
 ## Critical First Steps
 
-**Step 1: Load references**
-Read BOTH reference files from this skill's `references/` directory:
-1. `references/schema.json` - Authoritative JSON Schema
-2. `references/configuration.md` - Configuration reference
+**Step 1: Look up options when you need them**
+Do not read reference files up front. To look up an option, call `explain_config_option` if the mirrord MCP server is connected; otherwise search `references/configuration.md` in this skill's `references/` directory for it.
 
 If using absolute paths, these are located relative to this skill's installation directory. Search for them if needed using patterns like `**/mirrord-config/references/*`.
 
-**Step 2: Check mirrord CLI availability**
-```bash
-# Check if installed
-which mirrord
-```
+**Step 2: Pick the validator**
+If the mirrord MCP server is connected, validate with its `validate_config` tool. Otherwise validate with `mirrord verify-config <file>`.
 
-If `mirrord` is not available:
+If neither is available:
 - Do NOT run installers, package managers, or remote scripts automatically
 - Ask the user to install mirrord themselves via their approved process
-- Continue with schema-based validation from `references/schema.json` until CLI validation is possible
+- Present the config as not yet validated, with the `mirrord verify-config <file>` command for the user to run
 
 **Step 3: Validate before presenting**
 Every generated or modified config must pass the Validation Workflow below (see "Validation Workflow") before you present it to the user.
@@ -175,13 +170,13 @@ Every generated or modified config MUST be validated before presentation. Never 
 - No `additionalProperties` where schema forbids them
 
 **Steps:**
-1. Validate config against `references/schema.json`. Schema validation is mandatory and sufficient.
-2. **Optional:** If `mirrord` is already installed locally, save the config to a temporary file and run `mirrord verify-config <file>` for an extra check. Do not treat the CLI as a prerequisite for this skill.
+1. If the mirrord MCP server is connected, call `validate_config` on the config.
+2. Otherwise save the config to a temporary file and run `mirrord verify-config <file>`. Do not treat the CLI as a prerequisite for this skill.
 3. If any validation fails:
    - Parse error messages
    - Fix the config
    - Re-validate until success
-4. Present config with validation output — include CLI validation output only when CLI validation was run.
+4. Present config with the validation output, or say it is not yet validated when neither validator was available.
 
 **Path notation for errors:**
 Use JSON Pointer style: `/feature/network/incoming/mode`
