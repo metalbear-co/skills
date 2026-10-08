@@ -4,7 +4,9 @@
 
 Every fenced `json` or `yaml` block in a Markdown file carries one tag after the language in the fence info string, for example ` ```json mirrord `. The tag says whether the block is mirrord config and, for fragments, where it sits in the schema. Fences in other languages (`bash`, `toml`, `text`, ...) are not covered.
 
-`.github/scripts/check_fence_tags.py` runs on every pull request and fails on an untagged block, a tag outside the set below, or a config block (`mirrord`, `mirrord=`, `mirrord-up`, `mirrord-up=`) that does not parse as strict JSON or YAML or contains a `...` placeholder. Fragment paths and the fragment's root keys are resolved against the synced schemas, so a path that does not exist or a key that is not a property at that path also fails. Run it locally with `python3 .github/scripts/check_fence_tags.py` after `python3 -m pip install -r .github/scripts/requirements.txt`.
+`.github/scripts/check_fence_tags.py` runs on every pull request and fails on an untagged block, a tag outside the set below, or a config block (`mirrord`, `mirrord=`, `mirrord-up`, `mirrord-up=`) that does not parse as strict JSON or YAML or contains a `...` placeholder. Fragment paths and the fragment's root keys are resolved against the synced schemas, so a path that does not exist or a key that is not a property at that path also fails. Config blocks are then validated against the same schemas (JSON Schema Draft 7): a complete block as a whole, a fragment as the subtree at its path. A fragment may leave out required sibling keys, but every value it has must validate. A failure names the file, the line and the path inside the block where validation failed. Run it locally with `python3 .github/scripts/check_fence_tags.py` after `python3 -m pip install -r .github/scripts/requirements.txt` (PyYAML, markdown-it-py and jsonschema).
+
+The schemas default to the synced copies listed under [Fragment paths](#fragment-paths). `--mirrord-schema <file>` and `--mirrord-up-schema <file>` replace them, so the mirrord repo can run this same script against the schemas a build generates.
 
 ### Tag set
 

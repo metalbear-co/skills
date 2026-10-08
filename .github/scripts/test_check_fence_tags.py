@@ -3,9 +3,12 @@
 Run with: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 """
 
+import json
+import tempfile
 import textwrap
 import time
 import unittest
+from pathlib import Path
 
 import check_fence_tags as c
 
@@ -400,8 +403,10 @@ class ConfigBlocks(unittest.TestCase):
 
     def test_finite_floats_pass(self):
         _, failures = check("""
-            ```json mirrord
-            { "experimental": { "latency": { "receive_delay": 1.5 } } }
+            ```yaml mirrord-up=services.*.config_patch
+            experimental:
+              latency:
+                receive_delay: 1.5
             ```
         """)
         self.assertEqual(failures, [])
@@ -557,6 +562,71 @@ class ConfigBlocks(unittest.TestCase):
             ```
         """)
         self.assertEqual(failures, [])
+
+
+class SchemaValidation(unittest.TestCase):
+    def test_unknown_key_in_full_block_fails_with_path(self):
+        _, failures = check("""
+            ```json mirrord
+            { "target": { "path": "pod/my-pod", "container": "app" } }
+            ```
+        """)
+        self.assertEqual(failures, [
+            "t.md:1: 'mirrord' block fails skills/mirrord-config/references/schema.json at target: "
+            "Additional properties are not allowed ('container' was unexpected)",
+        ])
+
+    def test_ambiguous_oneof_names_the_branches(self):
+        _, failures = check("""
+            ```json mirrord
+            { "feature": { "db_branches": [ { "type": "redis", "connection": { "url": "REDIS_URL" } } ] } }
+            ```
+        """)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("at feature.db_branches[0]: matches more than one of", failures[0])
+
+    def test_valid_full_block_passes(self):
+        _, failures = check("""
+            ```json mirrord
+            { "target": { "path": "pod/my-pod/container/app" }, "feature": { "network": { "incoming": "steal" } } }
+            ```
+        """)
+        self.assertEqual(failures, [])
+
+    def test_fragment_without_required_siblings_passes(self):
+        _, failures = check("""
+            ```json mirrord=feature.db_branches[]
+            { "copy": { "mode": "schema" } }
+            ```
+
+            ```yaml mirrord-up=services.*
+            target:
+              path: deployment/api
+            ```
+        """)
+        self.assertEqual(failures, [])
+
+    def test_fragment_value_fails_with_path(self):
+        _, failures = check("""
+            ```json mirrord=feature.network
+            { "incoming": { "mode": "stael" } }
+            ```
+        """)
+        self.assertEqual(len(failures), 1)
+        self.assertTrue(failures[0].startswith(
+            "t.md:1: 'mirrord=feature.network' fragment fails skills/mirrord-config/references/schema.json at incoming"),
+            failures[0])
+
+    def test_schema_from_another_file(self):
+        schema = {"type": "object", "properties": {"target": {"type": "string"}}, "additionalProperties": False}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "generated.json"
+            path.write_text(json.dumps(schema))
+            schemas = {**SCHEMAS, **c.load_schemas({"mirrord": path})}
+        blocks, failures = [], []
+        c.check_text('```json mirrord\n{ "target": 1 }\n```\n', "t.md", blocks, failures, schemas,
+                     {**c.SCHEMAS, "mirrord": "generated.json"})
+        self.assertEqual(failures, ["t.md:1: 'mirrord' block fails generated.json at target: 1 is not of type 'string'"])
 
 
 if __name__ == "__main__":
