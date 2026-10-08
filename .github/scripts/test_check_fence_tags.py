@@ -577,13 +577,22 @@ class SchemaValidation(unittest.TestCase):
         ])
 
     def test_ambiguous_oneof_names_the_branches(self):
-        _, failures = check("""
-            ```json mirrord
-            { "feature": { "db_branches": [ { "type": "redis", "connection": { "url": "REDIS_URL" } } ] } }
-            ```
-        """)
-        self.assertEqual(len(failures), 1)
-        self.assertIn("at feature.db_branches[0]: matches more than one of", failures[0])
+        # A schema of its own, deliberately ambiguous, so upstream schema fixes can't break it.
+        branch = {"type": "object", "properties": {"url": {"type": "string"}, "location": {"type": "string"}}}
+        schema = {
+            "$defs": {
+                "LocalBranch": {**branch, "properties": {**branch["properties"], "location": {"const": "local"}}},
+                "RemoteBranch": {**branch, "properties": {**branch["properties"], "location": {"const": "remote"}}},
+            },
+            "type": "object",
+            "properties": {"branch": {"oneOf": [{"$ref": "#/$defs/LocalBranch"}, {"$ref": "#/$defs/RemoteBranch"}]}},
+        }
+        blocks, failures = [], []
+        c.check_text('```json mirrord\n{ "branch": { "url": "REDIS_URL" } }\n```\n', "t.md", blocks, failures,
+                     {**SCHEMAS, "mirrord": schema}, {**c.SCHEMAS, "mirrord": "ambiguous.json"})
+        self.assertEqual(failures, [
+            "t.md:1: 'mirrord' block fails ambiguous.json at branch: matches more than one of LocalBranch, RemoteBranch",
+        ])
 
     def test_valid_full_block_passes(self):
         _, failures = check("""
