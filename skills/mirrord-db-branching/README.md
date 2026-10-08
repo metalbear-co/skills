@@ -55,7 +55,7 @@ This skill helps AI agents:
 
 ## Quick example
 
-```json
+```json mirrord
 {
   "feature": {
     "db_branches": [

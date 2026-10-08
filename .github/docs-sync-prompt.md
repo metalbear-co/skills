@@ -24,11 +24,31 @@ Steps:
      truth for how things work now.
    - Update `SKILL.md`, `README.md`, and files under `references/` so their
      instructions, flags, config fields, and examples match the current docs.
+     These files are overwritten verbatim by
+     `.github/workflows/update-references.yml`, so never edit them:
+     - `skills/mirrord-config/references/configuration.md`
+     - `skills/mirrord-config/references/schema.json`
+     - `skills/mirrord-operator/references/values.yaml`
+     - `skills/mirrord-up/references/schema.json`
    - Keep the existing file structure, headings style, and tone. Make the
      smallest edits that restore accuracy — do not rewrite sections that are
      still correct.
    - Bump the `version` field in the skill's frontmatter by one minor version
      (e.g. `"1.1"` → `"1.2"`), once per edited skill.
+
+## Fence tags
+
+Every fenced `json` or `yaml` block you add or edit needs a tag after the
+language in the fence info string: `mirrord` for a complete `mirrord.json`,
+`mirrord=<schema.path>` for a fragment (for example
+`json mirrord=feature.db_branches[]`, with the path taken from
+`skills/mirrord-config/references/schema.json`), `mirrord-up` or
+`mirrord-up=<path>` for `mirrord-up.yaml`, or one of `mirrord-invalid`,
+`chaos-rule`, `crd`, `helm-values`, `k8s`, `workflow`, `output`, `other` for
+everything else. `mirrord-up=<path>` paths are taken from
+`skills/mirrord-up/references/schema.json`. Blocks tagged as config must parse as strict JSON or YAML, so
+no `...` placeholders or `//` comments: put explanations in the prose instead.
+A PR check rejects untagged blocks. The full convention is in `CONTRIBUTING.md`.
 
 ## Rules
 

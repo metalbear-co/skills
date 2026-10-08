@@ -69,7 +69,7 @@ Preview environments **deploy an image into a shared cluster and route live traf
 
 `operator.previewEnv` must be `true` in the operator's Helm values. Recent chart versions default it to `true`; older chart versions default to `false`, so set it explicitly when installing one of those:
 
-```yaml
+```yaml helm-values
 operator:
   previewEnv: true
 ```
@@ -125,7 +125,7 @@ The `preview URL` line only appears when [link sharing](#sharing-a-preview-via-a
 
 The config sets the **target** and the **traffic filter**; the image and key come from flags. Preview-specific settings live under `feature.preview`:
 
-```json
+```json mirrord
 {
   "target": {
     "path": "deployment/my-backend",
@@ -218,7 +218,7 @@ Right after creating it, the operator triggers the CronJob once (a Job named `<c
 
 Override the inherited schedule with `feature.preview.cronjob.schedule` (Kubernetes CronJob syntax):
 
-```json
+```json mirrord
 {
   "target": "cronjob/nightly-scan",
   "feature": {
@@ -247,7 +247,7 @@ By default, reaching a preview requires injecting the `baggage: mirrord-session=
 
 1. Configure the operator with the domain share hosts are minted under (must match the chart's `shareDomain`):
 
-   ```yaml
+   ```yaml helm-values
    operator:
      previewEnv: true
      shareIngress:
@@ -274,7 +274,7 @@ By default, reaching a preview requires injecting the `baggage: mirrord-session=
 
 By default the slug carries a random suffix, so the link only exists once `mirrord preview start` prints it. A cluster admin can set `operator.shareIngress.stableSlugs: true` when the link needs to exist before that — for example a PR bot that posts the preview URL built from the PR number before the preview even starts:
 
-```yaml
+```yaml helm-values
 operator:
   previewEnv: true
   shareIngress:
@@ -298,7 +298,7 @@ Set it up in three steps:
 
 1. **Create an identity and grant it the role** — a `ServiceAccount` (the identity), a `ClusterRoleBinding` attaching `mirrord-operator-ci` to it, and a `kubernetes.io/service-account-token` Secret to mint a token:
 
-   ```yaml
+   ```yaml k8s
    apiVersion: v1
    kind: ServiceAccount
    metadata: { name: preview-ci, namespace: staging }
@@ -327,7 +327,7 @@ Set it up in three steps:
 2. **Build a kubeconfig** from the API server address, cluster CA, and the token (`.data.token` from `preview-ci-token`, base64-decoded).
 3. **Store it as a CI secret** (e.g. base64-encode into `KUBECONFIG_DATA`), then decode it and point `KUBECONFIG` at it before any `mirrord preview` step:
 
-   ```yaml
+   ```yaml workflow
    - name: Configure cluster access
      env: { KUBECONFIG_DATA: "${{ secrets.KUBECONFIG_DATA }}" }
      run: |
@@ -359,7 +359,7 @@ A token with only this ClusterRole can manage preview environments but can't rea
 
 The runner needs a valid kubeconfig before the action runs (cloud auth + get-credentials).
 
-```yaml
+```yaml workflow
 name: Preview Environment
 on:
   pull_request:
@@ -394,7 +394,7 @@ jobs:
 
 Recommended concurrency so rapid pushes don't overlap:
 
-```yaml
+```yaml workflow
 concurrency:
   group: preview-env-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -421,7 +421,7 @@ mirrord preview stop -k "pr-${{ github.event.pull_request.number }}" || true
 
 A handy pattern is to set the key once and reuse it:
 
-```yaml
+```yaml workflow
 env:
   PREVIEW_KEY: "pr-${{ github.event.pull_request.number }}"
 ```
@@ -435,7 +435,7 @@ The typical flow: on PR open/push, CI builds the image(s), pushes to a registry,
 
 ### Using `extra_config` for anything the Action doesn't expose
 
-```yaml
+```yaml workflow
 - uses: metalbear-co/mirrord-preview@main
   with:
     action: start

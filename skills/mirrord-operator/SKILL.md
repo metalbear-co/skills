@@ -82,7 +82,7 @@ The operator needs credentials to obtain its license. Pick **one** path:
 **A. Cloud API key (default, recommended).** The operator authenticates to the mirrord cloud with a **cloud API key** and obtains its license over the API. Generate the key in the dashboard under **Settings** at [app.metalbear.com](https://app.metalbear.com) — it's shown **only once**. When generating it, an org admin also chooses **identity sharing** (ticked by default): with it on, usage metrics sent to the mirrord cloud include developer usernames and session targets so the usage dashboard can show them by name; with it off, metrics stay anonymized. Set `cloud.anonymizeData: true` in Helm values to keep metrics anonymized regardless of the key's setting. Provide the key one of three ways:
 
 - **Kubernetes Secret (recommended)** — the user creates the Secret; the key never lives in `values.yaml`. Point the chart at the secret name now (this doesn't require the secret to exist yet):
-  ```yaml
+  ```yaml helm-values
   cloud:
     apiKey:
       keyRef: mirrord-operator-cloud-api-key
@@ -185,7 +185,7 @@ This endpoint needs no authentication and no credit card. The response describes
 Air-gapped clusters can't reach the cloud to exchange an API key for a license, so they use an offline **license certificate** or a self-hosted **license server**.
 
 - **License PEM inline** — paste the certificate as a YAML literal block under `license.file.secret.data`:
-  ```yaml
+  ```yaml helm-values
   license:
     file:
       secret:
@@ -216,7 +216,7 @@ AGENT_IMAGE_VERSION=$(regctl image config ghcr.io/metalbear-co/operator:$IMAGE_V
 regctl image copy ghcr.io/metalbear-co/mirrord:$AGENT_IMAGE_VERSION your-registry/mirrord:$AGENT_IMAGE_VERSION
 ```
 
-```yaml
+```yaml helm-values
 operator:
   image: your-registry/operator
 agent:
@@ -230,7 +230,7 @@ Feature images are pulled only when the feature is enabled (Kafka sidecar, MSSQL
 
 - **OpenShift** — set `openshift: true` in values (renders a SecurityContextConstraints), covering the `mirrord-operator` and `default` service accounts in the mirrord namespace.
 - **GKE Autopilot** — mirrord is an approved [GKE Autopilot partner](https://docs.cloud.google.com/kubernetes-engine/docs/resources/autopilot-partners), so run the operator as a customer-owned privileged workload by applying an `AllowlistSynchronizer` (**not** a manually-written `WorkloadAllowlist` — Autopilot rejects a manual one with an admission error on standard clusters):
-  ```yaml
+  ```yaml k8s
   apiVersion: auto.gke.io/v1
   kind: AllowlistSynchronizer
   metadata:
@@ -246,7 +246,7 @@ Feature images are pulled only when the feature is enabled (Kafka sidecar, MSSQL
 
 The chart creates the roles users need — you don't hand-write mirrord CRD roles. For each namespace where developers run mirrord, add it to `roleNamespaces` so a namespaced role is created there; then bind users to it with your own RoleBinding:
 
-```yaml
+```yaml helm-values
 roleNamespaces:
   - staging
   - development
@@ -258,7 +258,7 @@ The chart also ships cluster roles: `mirrord-operator-user-basic`, `mirrord-oper
 
 Clients use the operator automatically when it's present. To force operator mode explicitly:
 
-```json
+```json mirrord
 { "operator": true, "target": "pod/my-app" }
 ```
 

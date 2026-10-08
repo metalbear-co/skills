@@ -102,4 +102,4 @@ Each skill is a folder following the [Agent Skills format](https://agentskills.i
 
 ## Contributing
 
-PRs welcome. Open an issue if you'd like to see a skill added or improved.
+PRs welcome. Open an issue if you'd like to see a skill added or improved. See [CONTRIBUTING.md](CONTRIBUTING.md) for the json/yaml fence tag convention.

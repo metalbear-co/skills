@@ -133,7 +133,7 @@ Store this as a **secret** environment variable named `MIRRORD_CI_API_KEY` in yo
 
 ### CI-specific config options
 
-```json
+```json mirrord
 {
   "target": "deployment/my-app",
   "ci": {
@@ -157,7 +157,7 @@ By default, application stdout/stderr are saved to:
 
 ### GitHub Actions
 
-```yaml
+```yaml workflow
 name: Integration Tests
 
 on: [push, pull_request]
@@ -195,7 +195,7 @@ jobs:
 
 ### GitLab CI
 
-```yaml
+```yaml workflow
 integration-tests:
   stage: test
   image: node:20
@@ -219,7 +219,7 @@ integration-tests:
 
 ### CircleCI
 
-```yaml
+```yaml workflow
 version: 2.1
 
 jobs:
@@ -296,7 +296,7 @@ The CI runner must have access to your Kubernetes cluster. Common approaches:
 
 Create a dedicated service account for CI:
 
-```yaml
+```yaml k8s
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -370,7 +370,7 @@ For detailed troubleshooting, refer to `references/troubleshooting.md`.
 ### Framework-Specific Issues
 
 **Turbo (monorepo):**
-```json
+```json other
 // turbo.json
 {
   "globalPassThroughEnv": ["MIRRORD_*", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES"]
@@ -378,7 +378,7 @@ For detailed troubleshooting, refer to `references/troubleshooting.md`.
 ```
 
 **Remix/Vite/Next.js** - Override NODE_ENV to avoid production config:
-```json
+```json mirrord
 {
   "feature": {
     "env": {
@@ -391,7 +391,7 @@ For detailed troubleshooting, refer to `references/troubleshooting.md`.
 ```
 
 **Next.js with Nx** - Exclude conflicting variables:
-```json
+```json mirrord
 {
   "feature": {
     "env": {
@@ -404,7 +404,7 @@ For detailed troubleshooting, refer to `references/troubleshooting.md`.
 ### Multi-Container Pods
 
 If your pod has multiple containers, specify the target container explicitly:
-```json
+```json mirrord
 {
   "target": {
     "path": "pod/my-pod",
