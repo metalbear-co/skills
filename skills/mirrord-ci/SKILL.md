@@ -407,8 +407,7 @@ If your pod has multiple containers, specify the target container explicitly:
 ```json mirrord
 {
   "target": {
-    "path": "pod/my-pod",
-    "container": "my-app-container"
+    "path": "pod/my-pod/container/my-app-container"
   }
 }
 ```

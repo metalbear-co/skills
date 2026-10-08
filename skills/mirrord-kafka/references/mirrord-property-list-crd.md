@@ -194,14 +194,17 @@ The store can be given two ways:
 - **Inline**, base64-encoded, via `mirrord.ssl.truststore.base64` / `mirrord.ssl.keystore.base64`. Recommended — nothing to mount into the operator pod.
 - **As a file**, via the standard `ssl.truststore.location` / `ssl.keystore.location`. The path is read from the **operator pod's** filesystem (not the target workload).
 
-Base64-encode the stores into a Secret next to their passwords:
+Base64-encode the stores into files, put each store password in its own file (`truststore.password`, `keystore.password`, no trailing newline), create the Secret from those files, then delete them:
 
 ```sh
+base64 < truststore.jks | tr -d '\n' > truststore.jks.base64
+base64 < keystore.jks | tr -d '\n' > keystore.jks.base64
 kubectl create secret generic kafka-stores --namespace meme \
-  --from-literal=truststore.jks.base64="$(base64 < truststore.jks | tr -d '\n')" \
-  --from-literal=keystore.jks.base64="$(base64 < keystore.jks | tr -d '\n')" \
-  --from-literal=truststore.password=changeit \
-  --from-literal=keystore.password=changeit
+  --from-file=truststore.jks.base64=truststore.jks.base64 \
+  --from-file=keystore.jks.base64=keystore.jks.base64 \
+  --from-file=truststore.password=truststore.password \
+  --from-file=keystore.password=keystore.password
+rm truststore.jks.base64 keystore.jks.base64 truststore.password keystore.password
 ```
 
 > The Secret must hold the **base64 text** of the store, not the raw bytes — property values are read as UTF-8 strings, so a key created with `--from-file=keystore.jks` cannot be read.

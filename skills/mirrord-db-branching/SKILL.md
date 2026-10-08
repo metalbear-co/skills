@@ -114,7 +114,7 @@ mirrord verify-config /path/to/config.json
 | Field | Applies to | Description |
 |-------|-----------|-------------|
 | `type` | all | Database engine (see table above). |
-| `connection` | all (optional for DynamoDB) | How mirrord locates the source connection details. See [Connection Modes](#connection-modes). |
+| `connection` | all | How mirrord locates the source connection details. See [Connection Modes](#connection-modes). |
 | `id` | all | Reuse/share a branch: same `id` reattaches to an existing branch while its TTL hasn't expired. Use a unique value (e.g. a UUID) to avoid reusing someone else's branch. Give two entries of the same `type` their own `id`s — from CLI **3.267.0+**, entries that would resolve to the same branch make mirrord refuse to start the session instead of silently colliding. All `generic` entries count as one type for this check. Ignored for local Redis. |
 | `name` | most | Source database name to clone. The override URL becomes `.../<name>`. If omitted, the URL points at the server and the app must select the DB. For **Redis**, `name` is the numeric DB **index** (default `0`). Required when using `migrations`. Not accepted for **S3** — a bucket isn't a server hosting several databases. |
 | `version` | all except generic, s3 | Engine image version (e.g. `"8.0"`, `"16"`). For generic, the tag lives in `image` and `version` is not allowed. Not accepted for S3 — there's no container to run. |
@@ -376,7 +376,7 @@ With `"empty"` + filters, only the listed collections/tables are created.
 Redis supports `empty` / `all` (remote only; local always starts empty). Narrow `all` with `SCAN MATCH` glob patterns:
 
 ```json mirrord=feature.db_branches[]
-{ "copy": { "mode": "all", "patterns": ["user:*", "session:*"] } }
+{ "location": "remote", "copy": { "mode": "all", "patterns": ["user:*", "session:*"] } }
 ```
 
 ### Custom dump arguments (`dump_args`) — MySQL & PostgreSQL only
@@ -514,7 +514,7 @@ Redis is the only engine that runs remotely **or** locally.
 ```json mirrord
 {
   "feature": { "db_branches": [ {
-    "type": "redis", "version": "7.2", "name": "0",
+    "type": "redis", "location": "remote", "version": "7.2", "name": "0",
     "connection": { "url": "REDIS_URL" },
     "copy": { "mode": "empty" }
   } ] }
@@ -818,6 +818,7 @@ Otherwise, provide safe defaults and note assumptions.
     "id": "users-dynamodb",
     "type": "dynamodb",
     "version": "latest",
+    "connection": { "url": "AWS_ENDPOINT_URL_DYNAMODB" },
     "iam_auth": { "type": "aws_rds" },
     "copy": {
       "mode": "all",
