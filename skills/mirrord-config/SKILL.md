@@ -32,12 +32,12 @@ Do not read reference files up front. To look up an option, call `explain_config
 If using absolute paths, these are located relative to this skill's installation directory. Search for them if needed using patterns like `**/mirrord-config/references/*`.
 
 **Step 2: Pick the validator**
-If the mirrord MCP server is connected, validate with its `validate_config` tool. Otherwise validate with `mirrord verify-config <file>`.
+Use the first of these that is available:
+1. The mirrord MCP server is connected: validate with its `validate_config` tool.
+2. The mirrord CLI is installed: save the config to a file and run `mirrord verify-config <file>`.
+3. Neither: validate against `references/schema.json`, reading only the definitions for the options the config uses (search the file for each key), not the whole file. Do NOT run installers, package managers, or remote scripts automatically; if the user wants CLI validation, ask them to install mirrord themselves via their approved process.
 
-If neither is available:
-- Do NOT run installers, package managers, or remote scripts automatically
-- Ask the user to install mirrord themselves via their approved process
-- Present the config as not yet validated, with the `mirrord verify-config <file>` command for the user to run
+Open the schema only in the third case.
 
 **Step 3: Validate before presenting**
 Every generated or modified config must pass the Validation Workflow below (see "Validation Workflow") before you present it to the user.
@@ -171,12 +171,13 @@ Every generated or modified config MUST be validated before presentation. Never 
 
 **Steps:**
 1. If the mirrord MCP server is connected, call `validate_config` on the config.
-2. Otherwise save the config to a temporary file and run `mirrord verify-config <file>`. Do not treat the CLI as a prerequisite for this skill.
-3. If any validation fails:
+2. Otherwise, if the mirrord CLI is installed, save the config to a temporary file and run `mirrord verify-config <file>`. Do not treat the CLI as a prerequisite for this skill.
+3. Otherwise validate against `references/schema.json`, reading only the definitions for the options the config uses (search the file for each key), not the whole file.
+4. If any validation fails:
    - Parse error messages
    - Fix the config
    - Re-validate until success
-4. Present config with the validation output, or say it is not yet validated when neither validator was available.
+5. Present config with the validation output. Never present a config as unvalidated.
 
 **Path notation for errors:**
 Use JSON Pointer style: `/feature/network/incoming/mode`

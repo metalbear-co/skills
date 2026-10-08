@@ -56,10 +56,11 @@ Each engine has minimum operator, mirrord CLI, and Helm chart versions, and a pe
 The app must read its DB connection from environment variables (or Kubernetes Secrets). mirrord overrides those variables with the branch's connection details for the session. Confirm the exact variable name(s) the app uses.
 
 **Step 3: Validate Configuration**
-After generating any config, ALWAYS validate it. If the mirrord MCP server is connected, call `validate_config` on the config; otherwise save it to a file and run:
+After generating any config, ALWAYS validate it. If the mirrord MCP server is connected, call `validate_config` on the config; otherwise, if the mirrord CLI is installed, save it to a file and run:
 ```bash
 mirrord verify-config /path/to/config.json
 ```
+If neither is available, validate against `references/schema.json` in the mirrord-config skill, reading only the definitions for the options the config uses (search the file for each key), not the whole file.
 
 ## Configuration Structure
 
@@ -895,4 +896,4 @@ Otherwise, provide safe defaults and note assumptions.
 - **Correct type**: Use the exact engine `type` string.
 - **Safe defaults**: Default to `"empty"` copy mode to avoid long creation times.
 - **No inline secrets**: Reference env vars / Secrets / Secret Manager; never invent credential values.
-- **Actionable feedback**: Explain what each field does when relevant, and always validate: `validate_config` when the mirrord MCP server is connected, otherwise `mirrord verify-config`.
+- **Actionable feedback**: Explain what each field does when relevant, and always validate: `validate_config` when the mirrord MCP server is connected, otherwise `mirrord verify-config` when the CLI is installed, otherwise the mirrord-config skill's `references/schema.json` (only the definitions the config uses).

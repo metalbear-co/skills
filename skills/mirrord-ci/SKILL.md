@@ -42,10 +42,11 @@ To look up a config option, call `explain_config_option` if the mirrord MCP serv
 If using absolute paths, search for them using patterns like `**/mirrord-ci/references/*`.
 
 **Step 2: Validate configs before presenting**
-When generating mirrord configuration files for CI, ALWAYS validate them. If the mirrord MCP server is connected, call `validate_config` on the config; otherwise save it to a file and run:
+When generating mirrord configuration files for CI, ALWAYS validate them. If the mirrord MCP server is connected, call `validate_config` on the config; otherwise, if the mirrord CLI is installed, save it to a file and run:
 ```bash
 mirrord verify-config /path/to/config.json
 ```
+If neither is available, validate against `references/schema.json` in the mirrord-config skill, reading only the definitions for the options the config uses (search the file for each key), not the whole file.
 
 ## Key Benefits of mirrord for CI
 

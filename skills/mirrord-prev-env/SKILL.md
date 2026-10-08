@@ -161,10 +161,11 @@ Key fields:
 
 > You can also set the image in config via `feature.preview.image` instead of `-i`; the CI Action does exactly this. The CLI `-i` flag is the convenient ad-hoc path.
 
-Validate before running. If the mirrord MCP server is connected, call `validate_config` on the config; otherwise run:
+Validate before running. If the mirrord MCP server is connected, call `validate_config` on the config; otherwise, if the mirrord CLI is installed, run:
 ```bash
 mirrord verify-config mirrord.json
 ```
+If neither is available, validate against `references/schema.json` in the mirrord-config skill, reading only the definitions for the options the config uses (search the file for each key), not the whole file.
 
 ### Sending traffic to your preview
 
