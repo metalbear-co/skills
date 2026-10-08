@@ -194,18 +194,22 @@ The store can be given two ways:
 - **Inline**, base64-encoded, via `mirrord.ssl.truststore.base64` / `mirrord.ssl.keystore.base64`. Recommended — nothing to mount into the operator pod.
 - **As a file**, via the standard `ssl.truststore.location` / `ssl.keystore.location`. The path is read from the **operator pod's** filesystem (not the target workload).
 
-Base64-encode the stores into files, put each store password in its own file (`truststore.password`, `keystore.password`, no trailing newline), create the Secret from those files, then delete them once it succeeds:
+Work in a private directory: `mktemp -d` creates it with mode `0700`, so other local users can't read anything inside it. Base64-encode the stores into it, put each store password in its own file there (`truststore.password`, `keystore.password`, no trailing newline, written with an editor rather than `echo` so it stays out of shell history), create the Secret from those files, then delete the directory once it succeeds:
 
 ```sh
-base64 < truststore.jks | tr -d '\n' > truststore.jks.base64
-base64 < keystore.jks | tr -d '\n' > keystore.jks.base64
+dir=$(mktemp -d)
+base64 < truststore.jks | tr -d '\n' > "$dir/truststore.jks.base64"
+base64 < keystore.jks | tr -d '\n' > "$dir/keystore.jks.base64"
+# write the two password files into "$dir" now
 kubectl create secret generic kafka-stores --namespace meme \
-  --from-file=truststore.jks.base64=truststore.jks.base64 \
-  --from-file=keystore.jks.base64=keystore.jks.base64 \
-  --from-file=truststore.password=truststore.password \
-  --from-file=keystore.password=keystore.password \
-  && rm truststore.jks.base64 keystore.jks.base64 truststore.password keystore.password
+  --from-file=truststore.jks.base64="$dir/truststore.jks.base64" \
+  --from-file=keystore.jks.base64="$dir/keystore.jks.base64" \
+  --from-file=truststore.password="$dir/truststore.password" \
+  --from-file=keystore.password="$dir/keystore.password" \
+  && rm -r "$dir"
 ```
+
+If Secret creation fails, the files stay in `$dir` for a retry; delete it with `rm -r "$dir"` when you are done.
 
 > The Secret must hold the **base64 text** of the store, not the raw bytes — property values are read as UTF-8 strings, so a key created with `--from-file=keystore.jks` cannot be read.
 
