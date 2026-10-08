@@ -46,7 +46,7 @@ When generating mirrord configuration files for CI, ALWAYS validate them. If the
 ```bash
 mirrord verify-config /path/to/config.json
 ```
-If neither is available, validate against `references/schema.json` in the mirrord-config skill, reading only the definitions for the options the config uses (search the file for each key), not the whole file.
+If neither is available, validate against `references/schema.json` in the mirrord-config skill, after parsing the config as strict JSON: read only the schema's top level (root `properties`, `required`, `additionalProperties`) and the definitions for the options the config uses (search the file for each key), not the whole file.
 
 ## Key Benefits of mirrord for CI
 

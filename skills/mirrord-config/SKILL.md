@@ -35,7 +35,7 @@ If using absolute paths, these are located relative to this skill's installation
 Use the first of these that is available:
 1. The mirrord MCP server is connected: validate with its `validate_config` tool.
 2. The mirrord CLI is installed: save the config to a file and run `mirrord verify-config <file>`.
-3. Neither: validate against `references/schema.json`, reading only the definitions for the options the config uses (search the file for each key), not the whole file. Do NOT run installers, package managers, or remote scripts automatically; if the user wants CLI validation, ask them to install mirrord themselves via their approved process.
+3. Neither: validate against `references/schema.json`, after parsing the config as strict JSON: read only the schema's top level (root `properties`, `required`, `additionalProperties`) and the definitions for the options the config uses (search the file for each key), not the whole file. Do NOT run installers, package managers, or remote scripts automatically; if the user wants CLI validation, ask them to install mirrord themselves via their approved process.
 
 Open the schema only in the third case.
 
@@ -172,7 +172,7 @@ Every generated or modified config MUST be validated before presentation. Never 
 **Steps:**
 1. If the mirrord MCP server is connected, call `validate_config` on the config.
 2. Otherwise, if the mirrord CLI is installed, save the config to a temporary file and run `mirrord verify-config <file>`. Do not treat the CLI as a prerequisite for this skill.
-3. Otherwise validate against `references/schema.json`, reading only the definitions for the options the config uses (search the file for each key), not the whole file.
+3. Otherwise validate against `references/schema.json`, after parsing the config as strict JSON: read only the schema's top level (root `properties`, `required`, `additionalProperties`) and the definitions for the options the config uses (search the file for each key), not the whole file.
 4. If any validation fails:
    - Parse error messages
    - Fix the config
