@@ -10,9 +10,9 @@
   "plugins": [
     {
       "name": "mirrord",
-      "description": "Official mirrord skills for Claude Code",
+      "description": "Connect your agent to a live Kubernetes cluster with mirrord, so it tests code changes against real services. Covers setup, config, CI, database branching, queue splitting, and preview environments.",
       "source": "./",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "category": "development",
       "keywords": ["mirrord", "kubernetes", "config", "k8s"],
       "skills": [
