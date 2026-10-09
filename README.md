@@ -87,6 +87,18 @@ Once installed, your agent activates the right skill based on the prompt:
 
 mirrord runs across teams like [monday.com](https://metalbear.com/mirrord/case-study/monday/) (350+ engineers on a single shared staging cluster), [SurveyMonkey](https://metalbear.com/mirrord/case-study/surveymonkey/), [CoLab](https://metalbear.com/mirrord/case-study/colab/), [Cadence](https://metalbear.com/mirrord/case-study/cadence/), [Daylight Security](https://metalbear.com/mirrord/case-study/daylight/), and [Zooplus](https://metalbear.com/mirrord/case-study/zooplus/). Daylight's team cut their edit-test cycle from 5–8 minutes to about 5 seconds after pairing Cursor with mirrord.
 
+## Data and external services
+
+The skills are instructions only. They contain no code that runs on install. The agent runs `mirrord`, `kubectl`, and `helm` against the cluster in your kubeconfig.
+
+One skill can send data to a service outside your cluster. When a cluster has no mirrord for Teams license, `mirrord-operator` can start a seven-day trial, but only after you agree. It sends these values to MetalBear (`app.metalbear.com`), through `mirrord operator install` or the `/api/v1/agent/signup` endpoint:
+
+- The name of the agent, for example `claude-code`
+- Your email address, if you give it
+- A hint that identifies the cluster: the UID of its `default` namespace, or a name you choose
+
+MetalBear keeps this data as its [privacy policy](https://metalbear.com/legal/privacy-policy/) describes. The mirrord CLI and the Operator also send usage telemetry to MetalBear. The [mirrord documentation](https://metalbear.com/mirrord/docs) tells you how to turn it off.
+
 ## Skill structure
 
 Each skill is a folder following the [Agent Skills format](https://agentskills.io/home):
