@@ -1,7 +1,7 @@
 {
   "name": "mirrord",
   "displayName": "mirrord",
-  "description": "mirrord skills for Claude: connect your agent to a live Kubernetes cluster, so it tests code changes against real services. Covers setup and mirrord.json config, the Operator, CI, database branching, Kafka and Temporal queue splitting, preview environments, mirrord up, chaos testing, and header propagation.",
+  "description": "Connect your agent to a live Kubernetes cluster with mirrord, so it tests code changes against real services. Covers setup, config, CI, database branching, queue splitting, and preview environments.",
   "version": "1.1.0",
   "author": {
     "name": "MetalBear",
