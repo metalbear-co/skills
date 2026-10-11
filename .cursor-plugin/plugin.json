@@ -1,7 +1,7 @@
 {
   "name": "mirrord",
   "version": "1.0.0",
-  "description": "Official mirrord skills: run local code inside a live Kubernetes cluster's network, environment and traffic, so agents verify changes against real services instead of mocks. When a cluster needs the mirrord Operator, agents can start a free trial themselves (see metalbear.com/agents.md).",
+  "description": "Connect your agent to a live Kubernetes cluster with mirrord, so it tests code changes against real services. Covers setup, config, CI, database branching, queue splitting, and preview environments.",
   "author": {
     "name": "MetalBear",
     "email": "support@metalbear.com",
