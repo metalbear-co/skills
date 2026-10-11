@@ -123,7 +123,7 @@ This configuration would make any certificate trusted for the process.
 When running the agent as an ephemeral container, the agent shares the network stack with the target pod. This means that incoming connections to the agent are handled by the service mesh, which might drop it for various reasons (lack of TLS, not HTTP, etc.) To work around that, set the agent.port to be static using `agent.port` in values.yaml when installing the operator, then add a port exclusion for the agent port in your service mesh's configuration. For example, if you use Istio and have set the agent port to 5000, you can add the following annotation for exclusion:
 
 ```
-traffic.sidecar.istio.io/excludeInboundPorts: '50000'
+traffic.sidecar.istio.io/excludeInboundPorts: '5000'
 ```
 
 ## I'm running a Next.js server with Nx and mirrord, but it doesn't behave as expected

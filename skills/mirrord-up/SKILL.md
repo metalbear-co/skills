@@ -221,6 +221,10 @@ config_patch:
 
 The Kubernetes context to run this service in. See [Context](#context) above for precedence rules against `common.context` and `--context`.
 
+#### `services.*.skip`
+
+When `true`, `mirrord up` doesn't launch this service unless it is named on the `mirrord up` command line. Defaults to `false`.
+
 ### Queue Splitting
 
 `mirrord up` supports queue splitting automatically for every service in `split` and `mirror` mode — there is no dedicated `services.*.messages` field in `mirrord-up.yaml`. Instead:

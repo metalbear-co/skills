@@ -26,23 +26,18 @@ Generate and validate `mirrord.json` configuration files:
 
 ## Critical First Steps
 
-**Step 1: Load references**
-Read BOTH reference files from this skill's `references/` directory:
-1. `references/schema.json` - Authoritative JSON Schema
-2. `references/configuration.md` - Configuration reference
+**Step 1: Look up options when you need them**
+Do not read reference files up front. To look up an option, call `explain_config_option` if the mirrord MCP server is connected; otherwise search `references/configuration.md` in this skill's `references/` directory for it.
 
 If using absolute paths, these are located relative to this skill's installation directory. Search for them if needed using patterns like `**/mirrord-config/references/*`.
 
-**Step 2: Check mirrord CLI availability**
-```bash
-# Check if installed
-which mirrord
-```
+**Step 2: Pick the validator**
+Use the first of these that is available:
+1. The mirrord MCP server is connected: validate with its `validate_config` tool.
+2. The mirrord CLI is installed: save the config to a file and run `mirrord verify-config <file>`.
+3. Neither: validate against `references/schema.json`, after parsing the config as strict JSON: read only the schema's top level (root `properties`, `required`, `additionalProperties`) and the definitions for the options the config uses (search the file for each key), not the whole file. Do NOT run installers, package managers, or remote scripts automatically; if the user wants CLI validation, ask them to install mirrord themselves via their approved process.
 
-If `mirrord` is not available:
-- Do NOT run installers, package managers, or remote scripts automatically
-- Ask the user to install mirrord themselves via their approved process
-- Continue with schema-based validation from `references/schema.json` until CLI validation is possible
+Open the schema only in the third case.
 
 **Step 3: Validate before presenting**
 Every generated or modified config must pass the Validation Workflow below (see "Validation Workflow") before you present it to the user.
@@ -175,13 +170,14 @@ Every generated or modified config MUST be validated before presentation. Never 
 - No `additionalProperties` where schema forbids them
 
 **Steps:**
-1. Validate config against `references/schema.json`. Schema validation is mandatory and sufficient.
-2. **Optional:** If `mirrord` is already installed locally, save the config to a temporary file and run `mirrord verify-config <file>` for an extra check. Do not treat the CLI as a prerequisite for this skill.
-3. If any validation fails:
+1. If the mirrord MCP server is connected, call `validate_config` on the config.
+2. Otherwise, if the mirrord CLI is installed, save the config to a temporary file and run `mirrord verify-config <file>`. Do not treat the CLI as a prerequisite for this skill.
+3. Otherwise validate against `references/schema.json`, after parsing the config as strict JSON: read only the schema's top level (root `properties`, `required`, `additionalProperties`) and the definitions for the options the config uses (search the file for each key), not the whole file.
+4. If any validation fails:
    - Parse error messages
    - Fix the config
    - Re-validate until success
-4. Present config with validation output — include CLI validation output only when CLI validation was run.
+5. Present config with the validation output. Never present a config as unvalidated.
 
 **Path notation for errors:**
 Use JSON Pointer style: `/feature/network/incoming/mode`

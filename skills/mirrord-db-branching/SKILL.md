@@ -42,14 +42,12 @@ Authoritative docs (fetch sub-pages for engine-specific detail):
 ## Critical First Steps
 
 **Step 0: Load References**
-Read the reference files from this skill's `references/` directory:
-- `references/db-branches-schema.json` — authoritative JSON Schema for `db_branches` (extracted from the mirrord schema). Config lives under `feature.db_branches`.
-- `references/troubleshooting.md` — common issues and solutions
+Read the reference file from this skill's `references/` directory:
+- `references/troubleshooting.md`: common issues and solutions
 
-The schema is derived from the official mirrord schema at:
-https://raw.githubusercontent.com/metalbear-co/mirrord/main/mirrord-schema.json
+Config lives under `feature.db_branches`. To look up a field, call `explain_config_option` if the mirrord MCP server is connected; otherwise use `references/configuration.md` in the mirrord-config skill.
 
-If using absolute paths, search for the schema using patterns like `**/mirrord-db-branching/references/*`.
+If using absolute paths, search for it using patterns like `**/mirrord-db-branching/references/*`.
 
 **Step 1: Verify Prerequisites**
 Each engine has minimum operator, mirrord CLI, and Helm chart versions, and a per-engine Helm value that must be enabled. See [Version Requirements](#version-requirements) below. DB branching needs the operator with a Teams/Enterprise license; on a cluster with no license, an AI agent can offer the user a seven-day Enterprise trial and start it once they agree (see the `mirrord-operator` skill, "Agent-started trial").
@@ -58,10 +56,11 @@ Each engine has minimum operator, mirrord CLI, and Helm chart versions, and a pe
 The app must read its DB connection from environment variables (or Kubernetes Secrets). mirrord overrides those variables with the branch's connection details for the session. Confirm the exact variable name(s) the app uses.
 
 **Step 3: Validate Configuration**
-After generating any config, ALWAYS run:
+After generating any config, ALWAYS validate it. If the mirrord MCP server is connected, call `validate_config` on the config; otherwise, if the mirrord CLI is installed, save it to a file and run:
 ```bash
 mirrord verify-config /path/to/config.json
 ```
+If neither is available, validate against `references/schema.json` in the mirrord-config skill, after parsing the config as strict JSON: read only the schema's top level (root `properties`, `required`, `additionalProperties`) and the definitions for the options the config uses (search the file for each key), not the whole file.
 
 ## Configuration Structure
 
@@ -114,7 +113,7 @@ mirrord verify-config /path/to/config.json
 | Field | Applies to | Description |
 |-------|-----------|-------------|
 | `type` | all | Database engine (see table above). |
-| `connection` | all (optional for DynamoDB) | How mirrord locates the source connection details. See [Connection Modes](#connection-modes). |
+| `connection` | all | How mirrord locates the source connection details. See [Connection Modes](#connection-modes). |
 | `id` | all | Reuse/share a branch: same `id` reattaches to an existing branch while its TTL hasn't expired. Use a unique value (e.g. a UUID) to avoid reusing someone else's branch. Give two entries of the same `type` their own `id`s — from CLI **3.267.0+**, entries that would resolve to the same branch make mirrord refuse to start the session instead of silently colliding. All `generic` entries count as one type for this check. Ignored for local Redis. |
 | `name` | most | Source database name to clone. The override URL becomes `.../<name>`. If omitted, the URL points at the server and the app must select the DB. For **Redis**, `name` is the numeric DB **index** (default `0`). Required when using `migrations`. Not accepted for **S3** — a bucket isn't a server hosting several databases. |
 | `version` | all except generic, s3 | Engine image version (e.g. `"8.0"`, `"16"`). For generic, the tag lives in `image` and `version` is not allowed. Not accepted for S3 — there's no container to run. |
@@ -376,7 +375,7 @@ With `"empty"` + filters, only the listed collections/tables are created.
 Redis supports `empty` / `all` (remote only; local always starts empty). Narrow `all` with `SCAN MATCH` glob patterns:
 
 ```json mirrord=feature.db_branches[]
-{ "copy": { "mode": "all", "patterns": ["user:*", "session:*"] } }
+{ "location": "remote", "copy": { "mode": "all", "patterns": ["user:*", "session:*"] } }
 ```
 
 ### Custom dump arguments (`dump_args`) — MySQL & PostgreSQL only
@@ -514,7 +513,7 @@ Redis is the only engine that runs remotely **or** locally.
 ```json mirrord
 {
   "feature": { "db_branches": [ {
-    "type": "redis", "version": "7.2", "name": "0",
+    "type": "redis", "location": "remote", "version": "7.2", "name": "0",
     "connection": { "url": "REDIS_URL" },
     "copy": { "mode": "empty" }
   } ] }
@@ -818,6 +817,7 @@ Otherwise, provide safe defaults and note assumptions.
     "id": "users-dynamodb",
     "type": "dynamodb",
     "version": "latest",
+    "connection": { "url": "AWS_ENDPOINT_URL_DYNAMODB" },
     "iam_auth": { "type": "aws_rds" },
     "copy": {
       "mode": "all",
@@ -896,4 +896,4 @@ Otherwise, provide safe defaults and note assumptions.
 - **Correct type**: Use the exact engine `type` string.
 - **Safe defaults**: Default to `"empty"` copy mode to avoid long creation times.
 - **No inline secrets**: Reference env vars / Secrets / Secret Manager; never invent credential values.
-- **Actionable feedback**: Explain what each field does when relevant, and always run `mirrord verify-config`.
+- **Actionable feedback**: Explain what each field does when relevant, and always validate: `validate_config` when the mirrord MCP server is connected, otherwise `mirrord verify-config` when the CLI is installed, otherwise the mirrord-config skill's `references/schema.json` (only its top level and the definitions the config uses).
