@@ -104,6 +104,7 @@ Routing: incoming traffic and queue splitting go to **all** Workload clusters (e
 | `tls` | `false` | TLS-secure agent connections; requires agent ≥ 3.97.0. |
 | `injectHeaders` | `true` | Agent marks whether a request went through the agent / was stolen. |
 | `port` | random high port | Set a fixed port for service-mesh exclusions. |
+| `resources` | `requests: {cpu: 1m, memory: 1Mi}` · `limits: {cpu: 1, memory: 100Mi}` | Per-agent-pod resources (operator `3.197.0`+). A field set to `null` is left out of the pod spec entirely. Doesn't apply to ephemeral agents (Kubernetes doesn't allow resources on ephemeral containers). |
 | `extraEnv` | `{}` | Extra agent env vars. |
 | `priorityClass.*` | create `mirrord-agent-pod`, value `1000000000` | PriorityClass for agent pods. |
 | `extraConfig` | — | Arbitrary agent config not covered above (`json_log`, `labels`, `annotations`, `tolerations`, `privileged`, …). |
