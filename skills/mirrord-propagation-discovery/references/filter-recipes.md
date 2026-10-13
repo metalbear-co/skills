@@ -7,6 +7,8 @@ Rules that apply to all of them:
 - **Headers are matched as `name: value` strings, one header at a time.** Regex filters get `(?i)` prepended, so they are case-insensitive. jq filters receive each header as a JSON string such as `"authorization: Bearer eyJ..."` with the **name in lowercase**, and the request matches when the program outputs `true` for any header. A program that outputs nothing, or errors, does not match.
 - **`http_filter` holds exactly one of** `header_filter`, `header_filter_jq`, `path_filter`, `method_filter`, `body_filter`, `all_of`, `any_of`, plus the optional `ports` list. Inside `all_of` / `any_of`, each entry is one of `{ "header" }`, `{ "query" }` (jq on headers), `{ "path" }`, `{ "method" }`, or a `{ "body": "json", "query", "matches" }` body filter.
 - **Use `{{ key }}` for developer-chosen values.** mirrord fills it from `--key`, `MIRRORD_KEY`, or `"key"` in the config, so one committed config serves every developer. Identity-bound values (a claim, a tenant) are per developer too: keep them in `{{ key }}` or an env var via `{{ get_env(name="MY_TENANT") }}`, never a literal in a shared file.
+- **`{{ key }}` is pasted into a regex verbatim.** Keep keys to letters, digits, `-` and `_`. A value with other punctuation (an email with `+` or `.`, a tenant slug with `/`) belongs in a jq equality (`. == "{{ key }}"`), never in a regex, or the developer's own value fails to match its filter.
+- **Match whole members, not substrings.** `.*mirrord-session={{ key }}.*` also matches `mirrord-session={{ key }}2` and would steal another developer's requests. The patterns below require a member boundary before the name (start or `,`) and after the value (`,`, `;` or end). Same for cookies (`;`).
 - **Set `ports`** to the target's HTTP ports when the pod also exposes non-HTTP ports (metrics, gRPC health, a debugger), otherwise mirrord applies the filter to every port it subscribes to.
 - **Start in `mirror` mode** to verify a filter; switch to `steal` only when the local process must be the one responding.
 - The jq engine is jaq (a jq reimplementation), with a 500 ms time limit per evaluation (`agent.jaq_time_limit`). Keep programs small and guard them with `select(startswith("<name>: "))` so only the header you care about is decoded. Test a program locally with `jq -n --arg h 'authorization: Bearer ...' '$h | <program>'` before putting it in the config; the behaviours used here (`select`, `sub`, `gsub`, `split`, `ltrimstr`, `@base64d`, `fromjson`, `try`/`catch`, `test`) match between jq 1.7 and jaq.
@@ -15,12 +17,12 @@ Rules that apply to all of them:
 
 ```json mirrord=feature.network.incoming.http_filter
 {
-  "header_filter": "^baggage: .*mirrord-session={{ key }}.*$",
+  "header_filter": "^baggage:\\s*(.*,\\s*)?mirrord-session={{ key }}\\s*([,;].*)?$",
   "ports": [8080]
 }
 ```
 
-The same shape works for `tracestate`: `"^tracestate: .*mirrord-session={{ key }}.*$"`.
+Reads: the header starts with `baggage:`, then optionally other members ending in a comma, then `mirrord-session=<key>`, then either the end, another member (`,`) or a member property (`;`). `tracestate` has no `;` properties: `"^tracestate:\\s*(.*,\\s*)?mirrord-session={{ key }}\\s*(,.*)?$"`.
 
 ## Correlation-id header, exact value
 
@@ -92,24 +94,24 @@ Clusters on Jaeger, OpenTracing, old Sleuth, or old .NET carry user-defined keys
     { "header": "^uberctx-mirrord-session: {{ key }}$" },
     { "header": "^ot-baggage-mirrord-session: {{ key }}$" },
     { "header": "^baggage-mirrord-session: {{ key }}$" },
-    { "header": "^correlation-context: .*mirrord-session={{ key }}.*$" },
-    { "header": "^jaeger-baggage: .*mirrord-session={{ key }}.*$" }
+    { "header": "^correlation-context:\\s*(.*,\\s*)?mirrord-session={{ key }}\\s*([,;].*)?$" },
+    { "header": "^jaeger-baggage:\\s*(.*,\\s*)?mirrord-session={{ key }}\\s*(,.*)?$" }
   ]
 }
 ```
 
 ## Identity injected by an auth proxy
 
-Plain-value headers from oauth2-proxy, IAP, ALB, Cloudflare Access:
+Plain-value headers from oauth2-proxy, IAP, ALB, Cloudflare Access. Emails contain regex metacharacters (`.`, `+`), so compare them as strings in jq instead of a regex; keep only the entry for the header the dump showed.
 
 ```json mirrord=feature.network.incoming.http_filter
 {
   "any_of": [
-    { "header": "^x-auth-request-email: {{ key }}$" },
-    { "header": "^x-forwarded-email: {{ key }}$" },
-    { "header": "^x-goog-authenticated-user-email: accounts\\.google\\.com:{{ key }}$" },
-    { "header": "^x-amzn-oidc-identity: {{ key }}$" },
-    { "header": "^cf-access-authenticated-user-email: {{ key }}$" }
+    { "query": "select(startswith(\"x-auth-request-email: \")) | ltrimstr(\"x-auth-request-email: \") | ascii_downcase == (\"{{ key }}\" | ascii_downcase)" },
+    { "query": "select(startswith(\"x-forwarded-email: \")) | ltrimstr(\"x-forwarded-email: \") | ascii_downcase == (\"{{ key }}\" | ascii_downcase)" },
+    { "query": "select(startswith(\"x-goog-authenticated-user-email: \")) | ltrimstr(\"x-goog-authenticated-user-email: accounts.google.com:\") | ascii_downcase == (\"{{ key }}\" | ascii_downcase)" },
+    { "query": "select(startswith(\"x-amzn-oidc-identity: \")) | ltrimstr(\"x-amzn-oidc-identity: \") | . == \"{{ key }}\"" },
+    { "query": "select(startswith(\"cf-access-authenticated-user-email: \")) | ltrimstr(\"cf-access-authenticated-user-email: \") | ascii_downcase == (\"{{ key }}\" | ascii_downcase)" }
   ]
 }
 ```
@@ -152,7 +154,7 @@ Regex is enough when the cookie value is the identifier:
 
 ```json mirrord=feature.network.incoming.http_filter
 {
-  "header_filter": "^cookie: .*(^|; )session_id={{ key }}(;|$)"
+  "header_filter": "^cookie:\\s*(.*;\\s*)?session_id={{ key }}\\s*(;.*)?$"
 }
 ```
 
@@ -196,8 +198,8 @@ When some clients send `baggage` and others `tracestate`:
 ```json mirrord=feature.network.incoming.http_filter
 {
   "any_of": [
-    { "header": "^baggage: .*mirrord-session={{ key }}.*$" },
-    { "header": "^tracestate: .*mirrord-session={{ key }}.*$" }
+    { "header": "^baggage:\\s*(.*,\\s*)?mirrord-session={{ key }}\\s*([,;].*)?$" },
+    { "header": "^tracestate:\\s*(.*,\\s*)?mirrord-session={{ key }}\\s*(,.*)?$" }
   ]
 }
 ```
@@ -234,7 +236,7 @@ When some clients send `baggage` and others `tracestate`:
 
 ## Complete config for verification
 
-Mirror mode, filter on the discovered identifier, ports pinned, probes excluded. Run it with `mirrord exec -f .mirrord/mirrord.json --key alice -- <command>`.
+Mirror mode, filter on the discovered identifier, ports pinned. Health checks carry no identifier, so the filter already excludes them; don't add `^user-agent: (?!kube-probe)` to an `all_of`, it requires a `user-agent` header and drops internal requests sent without one. Only a path-only filter needs a probe exclusion, as `{ "path": "^(?!/health)" }`. Run it with `mirrord exec -f .mirrord/mirrord.json --key alice -- <command>`.
 
 ```json mirrord
 {
@@ -248,10 +250,7 @@ Mirror mode, filter on the discovered identifier, ports pinned, probes excluded.
         "mode": "mirror",
         "ports": [8080],
         "http_filter": {
-          "all_of": [
-            { "header": "^baggage: .*mirrord-session={{ key }}.*$" },
-            { "header": "^user-agent: (?!kube-probe)" }
-          ],
+          "header_filter": "^baggage:\\s*(.*,\\s*)?mirrord-session={{ key }}\\s*([,;].*)?$",
           "ports": [8080]
         }
       }

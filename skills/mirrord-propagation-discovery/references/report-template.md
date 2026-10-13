@@ -58,10 +58,7 @@ Saved to `.mirrord/mirrord.json`. Run with `mirrord exec -f .mirrord/mirrord.jso
         "mode": "mirror",
         "ports": [8080],
         "http_filter": {
-          "all_of": [
-            { "header": "^baggage: .*mirrord-session={{ key }}.*$" },
-            { "header": "^user-agent: (?!kube-probe)" }
-          ],
+          "header_filter": "^baggage:\\s*(.*,\\s*)?mirrord-session={{ key }}\\s*([,;].*)?$",
           "ports": [8080]
         }
       }
@@ -78,5 +75,5 @@ Change `target.path` and both `ports` for `gateway` (8080) or `inventory` (9090)
 2. `notifications-worker`: confirm `baggage` is on the SQS message attributes; if not, the same propagation work covers the producer in `orders`.
 3. `payments`: set up HTTPS stealing, then re-run this discovery for that hop.
 
-**Verified:** mirror session on `deployment/inventory` with the config above received the tagged probe and not the untagged one. `billing` not verified (identifier does not reach it).
+**Verified:** mirror session on `deployment/inventory` with the config above and `scripts/request_recorder.py` as the local process received the tagged probe and not the untagged one. `billing` not verified (identifier does not reach it). `inventory` runs 2 replicas; both were dumped.
 **Dumps:** 3-minute window on each service plus 2 active probes, 2026-10-13; logs deleted.

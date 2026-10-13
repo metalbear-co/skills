@@ -45,7 +45,7 @@ These are the carriers a developer-chosen value can ride on without a new header
 | `sw8-correlation` | SkyWalking correlation context | SkyWalking | 🔧 |
 | `x-datadog-tags` | `_dd.p.*` entries | Datadog | 🔧 tracer-owned, don't add keys |
 
-**Filterable:** yes, by regex on the member (`^uberctx-mirrord-session: {{ key }}$`, `^correlation-context: .*mirrord-session={{ key }}`).
+**Filterable:** yes, by regex on the member with boundaries on both sides (`^uberctx-mirrord-session: {{ key }}$`, `^correlation-context:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$`).
 
 ## 3. Correlation and request ids (one value per request)
 

@@ -10,7 +10,7 @@ This skill helps AI agents:
 - **Dump** every hop at once in mirror mode, send one tagged probe request at the edge (or observe real traffic), and read the output
 - **Score** the identifiers found per hop with a stdlib helper: presence, unique-per-request vs stable, probe hits, values shared across hops; JWT claims and `baggage`/`tracestate` members are decoded, secrets are never printed
 - **Build** the matching filter: `header_filter` regex, `header_filter_jq` for JWTs and cookies, `path_filter`, `body_filter`, or `all_of`/`any_of` combinations, with `{{ key }}` templating
-- **Verify** it in a mirror session on the deepest hop before anyone steals
+- **Verify** it in a mirror session on the deepest hop before anyone steals, with a stdlib request recorder as the local process so the copied request causes no duplicate writes
 - **Recognise** anything else that travels between hops, from a reference of vendor trace headers, legacy baggage names, auth-proxy identity headers, routing and feature-flag headers, and queue and event carriers
 - **Report** what to filter on, which services it covers and which it does not (and why), which hops a dump can't observe (queue consumers, TLS terminated in the pod), a complete runnable `mirrord.json`, and what the `mirrord-header-propagation` skill has to fix. The report is printed and saved as `.mirrord/propagation-discovery.md`
 

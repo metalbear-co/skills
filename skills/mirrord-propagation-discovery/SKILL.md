@@ -89,7 +89,7 @@ Load `references/reading-dumps.md` for the exact commands, the output format, an
 - **Active probe (preferred):** start `mirrord dump` on every hop at once, each writing to its own log in a temp directory; wait for `Listening for traffic` in every log; send one request at the edge carrying a value you'll recognise under all the carriers at once (`baggage: mirrord-session=<probe>`, `tracestate: mirrord-session=<probe>`, `x-request-id: <probe>`, a minted `traceparent`, and the developer's own bearer token when the flow is authenticated); wait a few seconds; stop the dumps. Pick endpoints that fan out through every hop, and send several probes if one path doesn't cover them all.
 - **Passive observation (fallback):** when you can't reach the edge or can't authenticate, dump each hop for a few minutes of real traffic and let the statistics show what is already carried.
 
-Run the dumps with `MIRRORD_PROGRESS_MODE=dumb` so the `Listening for traffic` line survives redirection; the default spinner prints nothing to a file. Use `-p <port>` when auto-detection fails (`couldn't detect ports on target`). Use `--context` to pin the cluster. If a dump shows `TLS` connections with hex payloads, that pod terminates TLS itself; record it as not observable and move on.
+Run the dumps with `MIRRORD_PROGRESS_MODE=dumb` so the `Listening for traffic` line survives redirection; the default spinner prints nothing to a file. Use `-p <port>` when auto-detection fails (`couldn't detect ports on target`). Use `--context` to pin the cluster. **A `deployment/` dump attaches to one pod.** Check `kubectl get deploy <name> -o jsonpath='{.spec.replicas}'`; when it is more than one, dump every pod of that hop (`-t pod/<name>`, one log per pod named `<hop>--<pod>.log`, the stats script merges them), or the probe may land on a replica you are not watching. A hop you could not fully observe is **unknown**, never "dropped". If a dump shows `TLS` connections with hex payloads, that pod terminates TLS itself; record it as not observable and move on.
 
 ### Step 4: Score the candidates
 
@@ -119,19 +119,20 @@ If no candidate covers every hop, pick the one covering the most hops from the e
 Load `references/filter-recipes.md` and use the simplest filter that matches the candidate:
 
 - Exact or anchored value: `header_filter` regex (headers match case-insensitively as `name: value`).
-- A member inside a list: regex on the member (`^baggage: .*mirrord-session={{ key }}.*$`).
+- A member inside a list: regex on the member with a boundary on both sides (`^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$`). A bare `.*mirrord-session={{ key }}.*` also matches `{{ key }}2`, which is another developer.
+- `{{ key }}` goes into the regex verbatim, so keys are letters, digits, `-`, `_`. Emails and other punctuated values are compared in jq (`. == "{{ key }}"`).
 - A JWT claim, a cookie list, or anything that needs parsing: `header_filter_jq` (top level) or `{ "query": ... }` inside `all_of`/`any_of`. The program receives each header as a lowercase-named `name: value` string and must output `true`. Guard it with `select(startswith("<name>: "))` and `try ... catch false`.
-- Narrow with `all_of` when the identity is per tenant rather than per developer (add the route or method), and exclude probes with `^user-agent: (?!kube-probe)`.
+- Narrow with `all_of` when the identity is per tenant rather than per developer (add the route or method). Don't add a `^user-agent: (?!kube-probe)` entry: health checks carry no identifier so the filter already skips them, and that entry rejects internal requests sent without a `user-agent`.
 - Put the developer's value behind `{{ key }}` so the config can be committed, and set `ports` to the service's HTTP ports.
 
 Test jq programs locally first: `jq -n --arg h 'authorization: Bearer <token>' '$h | <program>'` must print `true` for the developer's token and nothing or `false` for others.
 
 ### Step 6: Verify with a live session
 
-Prove the filter on the deepest hop it should reach, in mirror mode so nothing is taken from the target:
+Prove the filter on the deepest hop it should reach, in mirror mode so nothing is taken from the target. **Run a request recorder as the local process, not the real service:** mirror mode copies the request, so the deployed service still handles it, and a real local handler would repeat its writes and publishes against the same staging dependencies. `scripts/request_recorder.py` binds the service's port, logs method, path and the identifier header, and answers 200:
 
 ```bash
-mirrord exec -f .mirrord/mirrord.json --key <value> --target deployment/<deepest-hop> -n <namespace> -- <the service's local command>
+mirrord exec -f .mirrord/mirrord.json --key <value> --target deployment/<deepest-hop> -n <namespace> -- python3 scripts/request_recorder.py --port <service port> --header baggage
 ```
 
 Run it with `MIRRORD_PROGRESS_MODE=dumb` and wait for the `Ready!` line before sending traffic. Send one request at the edge with the identifier set to `<value>` and one with a different value. The local process must receive the first and not the second. If it receives neither, check `ports`, that the identifier really reaches this hop (the dump from Step 3), and that the agent version supports the filter type. Then the developer can switch `"mode"` to `"steal"` for real work. Point to the `mirrord-config` skill for the rest of the config and to the browser extension for browser-driven flows.
@@ -179,7 +180,7 @@ Rules for the report:
 
 - **Every service in the hop inventory appears exactly once**, in "covered", "not covered", or "not observable". A service you never dumped is "not observable" with the reason.
 - **"Covered" means the probe value, or a value shared with the previous hop, was seen in the dump of that service**, not that its stack should forward it.
-- **The `mirrord.json` is complete and runnable**: `target` with namespace, `mode: "mirror"`, `ports`, the filter with `{{ key }}`, and the `^user-agent: (?!kube-probe)` exclusion when the service has HTTP probes. Write it to `.mirrord/mirrord.json` unless the user names another path, and say which `target.path`/`ports` to change for the other covered services.
+- **The `mirrord.json` is complete and runnable**: `target` with namespace, `mode: "mirror"`, `ports`, and the filter with `{{ key }}` and member boundaries. Write it to `.mirrord/mirrord.json` unless the user names another path, and say which `target.path`/`ports` to change for the other covered services.
 - When **every** service is covered, "Services not covered" is an empty section with "none" and the Next steps are only the steal switch.
 - When **no** candidate covers more than the edge, still fill the report: the recommendation is `baggage` plus the `mirrord-header-propagation` skill, and "Services not covered" lists each hop with what it would take.
 

@@ -18,14 +18,14 @@ Identifiers that are unique but not controllable (an ingress-minted request id t
 
 - **Who sets it:** the caller. Members are `key=value` pairs separated by commas; mirrord's convention is `mirrord-session=<key>`.
 - **Propagated by:** OpenTelemetry (baggage propagator enabled), Datadog on recent tracers, Spring/Micrometer with `remote-fields`, or an explicit propagation layer. See the `mirrord-header-propagation` skill.
-- **Filter:** `"header_filter": "^baggage: .*mirrord-session={{ key }}.*$"`
+- **Filter:** `"header_filter": "^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$"` (member boundaries on both sides, see `filter-recipes.md`)
 - **Pitfalls:** only reaches hops whose service forwards it. Gateways with header allowlists drop it. Sentry and other SDKs add their own members, so match the member, never the whole value.
 
 ### 2. `tracestate` (W3C)
 
 - **Who sets it:** the caller, as `vendor=value` entries.
 - **Propagated by:** the tracecontext propagator. Most SDKs forward unknown entries unchanged.
-- **Filter:** `"header_filter": "^tracestate: .*mirrord-session={{ key }}.*$"`
+- **Filter:** `"header_filter": "^tracestate:\s*(.*,\s*)?mirrord-session={{ key }}\s*(,.*)?$"`
 - **Pitfalls:** the spec caps it at 32 entries and some SDKs truncate or rewrite it. Some proxies only forward it together with a valid `traceparent`, so send both.
 
 ### 3. Correlation-id headers: `x-request-id`, `x-correlation-id`, `request-id`, `x-amzn-trace-id`, `x-cloud-trace-context`, `x-b3-traceid`
@@ -74,7 +74,7 @@ The same pitfalls as `traceparent` apply: the span part changes per hop, a servi
 
 - **Who sets it:** the app or the identity provider at login.
 - **Unique per:** session or identity.
-- **Filter:** `"header_filter": "^cookie: .*(^|; )session_id={{ key }}(;|$)"`, or jq when the cookie holds a JWT.
+- **Filter:** `"header_filter": "^cookie:\s*(.*;\s*)?session_id={{ key }}\s*(;.*)?$"`, or jq when the cookie holds a JWT.
 - **Pitfalls:** cookies rarely survive past the first service. Treat as edge-only unless the dump proves otherwise.
 
 ### 8. Path segments and query parameters

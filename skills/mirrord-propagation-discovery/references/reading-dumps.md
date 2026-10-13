@@ -8,7 +8,7 @@ mirrord dump -t deployment/orders -n staging            # 3.191.0+: attaches to 
 mirrord dump -t deployment/orders -n staging --context staging-cluster
 ```
 
-Target syntax is the same as `mirrord exec`: `deployment/`, `pod/`, `statefulset/`, `rollout/`, `service/`, `label/k=v`, optionally `/container/<name>`. Targetless is not supported. If port detection fails (`couldn't detect ports on target`), the containers declare no `ports:`; read the Service's `targetPort` and pass `-p`.
+A `deployment/` (or `service/`, `rollout/`...) target attaches the agent to **one pod** of that workload. For a hop with several replicas, dump each pod (`-t pod/<name>`) into its own log, named `<hop>--<pod>.log` so `dump_stats.py` merges them into one hop; otherwise a probe routed to another replica looks like a propagation gap. Target syntax is the same as `mirrord exec`: `deployment/`, `pod/`, `statefulset/`, `rollout/`, `service/`, `label/k=v`, optionally `/container/<name>`. Targetless is not supported. If port detection fails (`couldn't detect ports on target`), the containers declare no `ports:`; read the Service's `targetPort` and pass `-p`.
 
 Traffic goes to stdout. Progress (`Listening for traffic... Press Ctrl+C to stop`) is drawn as a spinner and **disappears when stdout is not a terminal**, so set `MIRRORD_PROGRESS_MODE=dumb` to get it as plain lines, and capture both streams into a file outside the repo:
 
@@ -62,22 +62,26 @@ NS=staging
 HOPS="gateway orders inventory billing"      # one deployment per hop, edge first
 
 PIDS=""
+trap 'kill $PIDS 2>/dev/null; wait $PIDS 2>/dev/null' EXIT INT TERM   # never leave dumps capturing
 for h in $HOPS; do
-  mirrord dump -t "deployment/$h" -n "$NS" > "$DUMP_DIR/$h.log" 2>&1 &
-  PIDS="$PIDS $!"
+  # one dump per pod so a multi-replica hop is fully observed; logs named <hop>--<pod>.log merge in dump_stats.py
+  for pod in $(kubectl get pods -n "$NS" -o name --field-selector=status.phase=Running | grep "^pod/$h-"); do
+    mirrord dump -t "$pod" -n "$NS" > "$DUMP_DIR/$h--${pod#pod/}.log" 2>&1 &
+    PIDS="$PIDS $!"
+  done
 done
 # wait until every dump is subscribed (or give up after 90s and look at the log)
-for h in $HOPS; do
+for log in "$DUMP_DIR"/*.log; do
   n=0
-  until grep -q "Listening for traffic" "$DUMP_DIR/$h.log"; do
+  until grep -q "Listening for traffic" "$log"; do
     sleep 2; n=$((n+2))
-    if [ $n -ge 90 ]; then echo "$h: not subscribed after 90s"; tail -5 "$DUMP_DIR/$h.log"; break; fi
+    if [ $n -ge 90 ]; then echo "$(basename "$log"): not subscribed after 90s"; tail -5 "$log"; break; fi
   done
 done
 
 PROBE="probe-$(date +%s)-$RANDOM"
 TRACE_ID=$(printf '%032x' "$RANDOM$RANDOM$RANDOM")
-curl -sS -o /dev/null "$EDGE_URL/v1/orders" \
+curl -sS -m 20 -o /dev/null "$EDGE_URL/v1/orders" \
   -H "baggage: mirrord-session=$PROBE" \
   -H "tracestate: mirrord-session=$PROBE" \
   -H "x-request-id: $PROBE" \
@@ -87,9 +91,7 @@ curl -sS -o /dev/null "$EDGE_URL/v1/orders" \
 sleep 5
 kill $PIDS 2>/dev/null; wait $PIDS 2>/dev/null     # by PID: job numbers (%1) don't work in non-interactive shells
 
-for h in $HOPS; do
-  echo "== $h"; grep -n -i "$PROBE\|$TRACE_ID" "$DUMP_DIR/$h.log" | sed 's/\(bearer \)[^ ]*/\1<redacted>/I'
-done
+python3 scripts/dump_stats.py --probe "$PROBE" "$DUMP_DIR"/*.log
 ```
 
 Read the result per hop:
@@ -99,6 +101,7 @@ Read the result per hop:
 - The marker at hop 1 shows `$PROBE` under `x-request-id` only if the ingress preserved it. If the value differs, the ingress overwrote it.
 - `$TRACE_ID` appearing inside `traceparent` at every hop means tracecontext propagation works end to end. If it is present at hop 1 and missing later, that service starts a new trace.
 - Nothing at a hop while the request did reach it (you see its request without the probe) means every candidate was dropped there.
+- Nothing at a hop and **no request at all** means you did not observe it: a replica you did not dump, a path that did not fan out there, or a queue in between. Record it as unknown and probe again, never as a gap.
 
 Reach the edge the way real clients do: the public ingress URL, or `kubectl port-forward svc/<edge> 8080:80` when there is no external route. Pick endpoints that fan out through every hop; run several probes if one path does not cover them all. For a browser-driven flow, the mirrord browser extension can inject the same headers.
 
@@ -111,7 +114,7 @@ timeout 180 mirrord dump -t deployment/orders -n "$NS" > "$DUMP_DIR/orders.log" 
 python3 scripts/dump_stats.py "$DUMP_DIR"/*.log
 ```
 
-`dump_stats.py` (stdlib only) prints, per hop, the request count and for each header: presence, distinct values, and whether the value is unique per request or stable; it decodes JWT claim names from `authorization: Bearer` and `baggage`/`tracestate` member keys, and reports which values appear on every hop. Pass `--probe <value>` to do the active-probe search across all logs. It prints names, counts and short previews only; `--show-values` is needed to see full values, and you should not need it.
+`dump_stats.py` (stdlib only) prints, per hop, the request count and for each header: presence, distinct values, and whether the value is unique per request or stable; it decodes JWT claim names from `authorization: Bearer` and `baggage`/`tracestate` member keys, and reports which values appear on every hop. With `--probe <value>` the candidates are the identifiers that carried the probe at every observed hop, independent of how much other traffic was captured; without it, candidates come from presence across all captured requests. Hops with no application requests are reported as unknown in both modes. It prints names, counts and short previews only; `--show-values` is needed to see full values, and you should not need it.
 
 Without the script, the same questions by hand:
 

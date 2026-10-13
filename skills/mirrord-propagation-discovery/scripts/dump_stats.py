@@ -88,7 +88,14 @@ def parse_log(path):
                 continue
             m = HEADER_LINE.match(line)
             if m:
-                current["__headers__"][m.group(1).lower()] = m.group(2)
+                name, value = m.group(1).lower(), m.group(2)
+                hdrs = current["__headers__"]
+                if name in hdrs:
+                    # A repeated header is one header with combined values (RFC 9110 §5.3);
+                    # cookies combine with "; ". Overwriting would drop a member.
+                    hdrs[name] = hdrs[name] + ("; " if name == "cookie" else ", ") + value
+                else:
+                    hdrs[name] = value
             else:
                 current = None
     return requests
@@ -253,11 +260,9 @@ def preview(value, show):
 
 
 def is_secret(name):
-    """True for raw token values; decoded claim names/values are fine to preview."""
+    """True for raw credential values (tokens, cookies); decoded JWT claims may preview."""
     base, _, rest = name.partition(":")
-    if name == "authorization:<opaque>":
-        return True
-    if base in SECRET_HEADERS and not rest.startswith("jwt.") and base != "cookie":
+    if base in SECRET_HEADERS and ".jwt." not in ":" + rest and not rest.startswith("jwt."):
         return True
     return False
 
@@ -272,12 +277,18 @@ def main():
     args = ap.parse_args()
 
     hops = []
+    by_name = {}
     for path in args.logs:
-        name = os.path.splitext(os.path.basename(path))[0]
+        # "<hop>--<pod>.log" files are several replicas of one hop: merge them.
+        name = os.path.splitext(os.path.basename(path))[0].split("--", 1)[0]
         reqs = parse_log(path)
         if not args.include_probes:
             reqs = [r for r in reqs if not is_health_check(r)]
-        hops.append((name, reqs))
+        if name in by_name:
+            by_name[name].extend(reqs)
+        else:
+            by_name[name] = reqs
+            hops.append((name, by_name[name]))
 
     # per hop, per identifier: list of values
     per_hop = {}
@@ -295,6 +306,7 @@ def main():
             print("    (no application requests parsed: no traffic, only health checks, TLS terminated in the pod, or non-HTTP port)")
     print()
 
+    probe_hits = {}   # hop -> Counter(identifier -> requests carrying the probe)
     if args.probe:
         print("Probe %r" % args.probe)
         for name, reqs in hops:
@@ -306,10 +318,13 @@ def main():
                 for hname, hval in r["__headers__"].items():
                     if hname in SECRET_HEADERS and args.probe in hval:
                         hits[hname] += 1
+            probe_hits[name] = hits
             if hits:
-                print("  %-24s %s" % (name, ", ".join("%s (%d)" % kv for kv in sorted(hits.items()))))
+                print("  %-24s %s" % (name, ", ".join("%s (%d of %d requests)" % (k, c, len(reqs)) for k, c in sorted(hits.items()))))
+            elif not reqs:
+                print("  %-24s unknown: no application requests captured" % name)
             else:
-                print("  %-24s not found" % name)
+                print("  %-24s not found in %d requests" % (name, len(reqs)))
         print()
 
     all_ids = sorted({k for _, (_, t) in per_hop.items() for k in t})
@@ -323,7 +338,10 @@ def main():
         for name, _ in hops:
             total, table = per_hop[name]
             vals = table.get(ident, [])
-            if total == 0 or not vals:
+            if total == 0:
+                cells.append("%-18s" % "unknown")
+                continue                      # not observed: neither evidence for nor against
+            if not vals:
                 cells.append("%-18s" % "-")
                 present_everywhere = False
                 shared = set()
@@ -346,10 +364,30 @@ def main():
             candidates.append((ident, shared_n))
     print()
 
-    if len(hops) > 1:
-        print("Candidates present on every hop (presence >= %d%%) with values shared across all hops:" % round(args.min_presence * 100))
+    observed = [name for name, reqs in hops if reqs]
+    unknown = [name for name, reqs in hops if not reqs]
+    if unknown:
+        print("Unknown hops (no application requests captured; not evidence of a gap): " + ", ".join(unknown))
+        print()
+
+    if args.probe:
+        # Probe mode: a candidate carried the probe value at every observed hop, whatever else was captured.
+        print("Candidates carrying the probe at every observed hop (%s):" % ", ".join(observed))
+        all_hit = sorted({k for h in observed for k in probe_hits.get(h, ())})
+        found = False
+        for ident in all_hit:
+            if all(probe_hits.get(h, collections.Counter())[ident] > 0 for h in observed):
+                found = True
+                print("  %-40s %s" % (ident, "  ".join("%s %d/%d" % (h, probe_hits[h][ident], len(dict(hops)[h])) for h in observed)))
+        if not found:
+            print("  none carried the probe to every observed hop. Hops where it stops:")
+            for h in observed:
+                if not probe_hits.get(h):
+                    print("    %s" % h)
+    elif len(hops) > 1:
+        print("Candidates present on every observed hop (presence >= %d%%) with values shared across them:" % round(args.min_presence * 100))
         if not candidates:
-            print("  none. No identifier survives every hop; see identifier-catalog.md and the mirrord-header-propagation skill.")
+            print("  none meets the threshold on every observed hop. Read the per-hop columns before calling this a gap; background traffic lowers presence.")
         for ident, n in candidates:
             sample = ""
             if not is_secret(ident):
