@@ -3,7 +3,7 @@ name: mirrord-quickstart
 description: Guide users from zero to their first working mirrord session — check system requirements, install mirrord via CLI, VS Code, or IntelliJ, run a first session against a Kubernetes target, and verify the connection. Use when a user is new to mirrord, wants to install it, needs help running their first session, or wants to debug or test a local process against their Kubernetes cluster.
 metadata:
   author: MetalBear
-  version: "1.2"
+  version: "1.3"
 ---
 
 # Mirrord Quickstart Skill
@@ -127,4 +127,4 @@ Once the first session works, point users to:
 | "kubectl not found" | Install kubectl and configure cluster access |
 | "No pods found" | Check namespace: `kubectl get pods -n <namespace>` |
 | "Permission denied" | Check RBAC permissions for your kubectl context |
-| "Agent failed to start" | Ensure cluster runs Linux kernel 4.20+ |
+| "Agent failed to start" | Ensure cluster nodes run Linux kernel 5.4+ with a containerd, CRI-O, or Docker runtime |
