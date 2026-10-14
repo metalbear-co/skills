@@ -2,7 +2,7 @@
 
 # mirrord Agent Skills
 
-Eleven [Agent Skills](https://agentskills.io/home) that close the AI agent feedback loop on Kubernetes: real env vars, real DNS, real network, real traffic, real databases, real Kafka, real Temporal task queues, real preview environments, multi-service local sessions, real failure conditions, and the header propagation that lets a session follow a request across services and queues. Built by [MetalBear](https://metalbear.com/) to be used with [mirrord](https://metalbear.com/mirrord/).
+Twelve [Agent Skills](https://agentskills.io/home) that close the AI agent feedback loop on Kubernetes: real env vars, real DNS, real network, real traffic, real databases, real Kafka, real Temporal task queues, real preview environments, multi-service local sessions, real failure conditions, the header propagation that lets a session follow a request across services and queues, and the discovery of what your cluster already propagates so a filter can use it. Built by [MetalBear](https://metalbear.com/) to be used with [mirrord](https://metalbear.com/mirrord/).
 
 AI coding agents work from what's in their context window. Your Kubernetes cluster is full of state that isn't. These skills teach your agent how and when to use mirrord so the code it writes against your live infrastructure stops being informed guessing.
 
@@ -21,7 +21,7 @@ AI coding agents work from what's in their context window. Your Kubernetes clust
 codex plugin marketplace add metalbear-co/skills
 ```
 
-Then install the `mirrord` plugin from `/plugins`. All eleven skills come with it.
+Then install the `mirrord` plugin from `/plugins`. All twelve skills come with it.
 
 ### OpenCode
 
@@ -31,7 +31,7 @@ OpenCode loads skills natively, so there's nothing to register — the skills ju
 curl -fsSL https://raw.githubusercontent.com/metalbear-co/skills/main/install.sh | sh
 ```
 
-That writes the eleven skill folders into `~/.config/opencode/skills/`. Restart OpenCode and they're available. Re-run it any time to update — it replaces the `mirrord-*` folders and leaves your other skills alone.
+That writes the twelve skill folders into `~/.config/opencode/skills/`. Restart OpenCode and they're available. Re-run it any time to update — it replaces the `mirrord-*` folders and leaves your other skills alone.
 
 The same script serves any agent that reads a skills directory:
 
@@ -51,7 +51,7 @@ npx skills add metalbear-co/skills
 
 The [`ports/`](./ports/) directory carries the same core content as drop-in rules files: copy [`ports/github-copilot/copilot-instructions.md`](./ports/github-copilot/copilot-instructions.md) into your repo's `.github/`, or [`ports/cline/.clinerules`](./ports/cline/.clinerules) into your repo root. Want another format? [Open an issue](https://github.com/metalbear-co/skills/issues) with the target you'd like next.
 
-## The eleven skills
+## The twelve skills
 
 | Skill | What it does |
 |-------|--------------|
@@ -66,6 +66,7 @@ The [`ports/`](./ports/) directory carries the same core content as drop-in rule
 | [mirrord-up](./skills/mirrord-up/) | Multiple concurrent local sessions from `mirrord-up.yaml` — compose-style multi-service debugging. |
 | [mirrord-chaos](./skills/mirrord-chaos/) | Chaos testing: inject latency or connection errors into a session's outgoing traffic via per-session rules, interactively or in CI. |
 | [mirrord-header-propagation](./skills/mirrord-header-propagation/) | Propagate the `baggage` session header across HTTP, gRPC, queues (Kafka, RabbitMQ, SQS, Pub/Sub, ...) and storage-triggered flows, reusing existing OpenTelemetry/Datadog where possible, and report the flows that still drop it. |
+| [mirrord-propagation-discovery](./skills/mirrord-propagation-discovery/) | Scan live traffic with `mirrord dump` to find which identifier (baggage, request id, tenant id, trace id, JWT claim, cookie, path, body field) survives every hop and is yours to set, then produce the matching `http_filter` and a per-hop report of where it's dropped. |
 
 ## Example prompts
 
@@ -82,6 +83,7 @@ Once installed, your agent activates the right skill based on the prompt:
 - "Generate a mirrord-up.yaml so I can debug my auth and dashboard services together."
 - "Make 30% of my service's calls to the payments API time out, so I can test our retry logic."
 - "Make the mirrord session header follow requests through our Kafka and SQS consumers."
+- "Which header or JWT claim can I filter on so I only get my own requests across all our services?"
 
 ## Trusted by
 
