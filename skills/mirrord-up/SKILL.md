@@ -7,7 +7,7 @@ description: >
   or managing multiple mirrord sessions' lifecycle in one command.
 metadata:
   author: MetalBear
-  version: "1.6"
+  version: "1.7"
 ---
 
 # mirrord up Skill
