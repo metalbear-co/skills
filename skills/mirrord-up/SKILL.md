@@ -7,7 +7,7 @@ description: >
   or managing multiple mirrord sessions' lifecycle in one command.
 metadata:
   author: MetalBear
-  version: "1.7"
+  version: "1.8"
 ---
 
 # mirrord up Skill
@@ -245,6 +245,8 @@ A service in **`replace` mode doesn't use queue splitting**: the deployed worklo
 
 - `command`: array of strings (binary + args)
 - `type`: `exec` or `container` (default `exec`) — runs via `mirrord exec` or `mirrord container`
+- `directory`: working directory for `command`. Relative paths resolve against the directory containing `mirrord-up.yaml`, and the directory must exist. Only valid with `type: exec`. When unset, `command` runs in the directory `mirrord up` was started from.
+- `pre_command`: array of strings for a command that runs to completion **before** this service's mirrord session starts (e.g. a build step) — locally, without mirrord, in the same `directory` as `command`. The session only starts if it exits successfully; a failing or unstartable `pre_command` shows its output and error, skips this service, and leaves the other services running.
 
 ```yaml mirrord-up=services.*
 run:
@@ -255,6 +257,14 @@ run:
 ```yaml mirrord-up=services.*
 run:
   command: ["node", "app.js"]
+```
+
+```yaml mirrord-up=services.*
+run:
+  directory: services/api
+  # Built locally without mirrord, before the session starts
+  pre_command: ["npm", "run", "build"]
+  command: ["node", "dist/app.js"]
 ```
 
 ### Templating

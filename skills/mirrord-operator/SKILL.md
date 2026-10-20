@@ -3,7 +3,7 @@ name: mirrord-operator
 description: Help users install and configure the mirrord Operator for team/enterprise environments. Use when users ask about operator setup, Helm installation, cloud API key or license configuration, air-gapped/offline licensing, enabling features (queue splitting, DB branching, preview environments, multi-cluster), internal registries, OpenShift/GKE Autopilot, RBAC, or multi-user mirrord deployments. Also use when an AI agent hits a Team or Enterprise feature on a cluster with no license and needs to offer the user a trial (agent-started trial; the trial is Enterprise tier).
 metadata:
   author: MetalBear
-  version: "2.18"
+  version: "2.19"
 ---
 
 # Mirrord Operator Skill
@@ -69,6 +69,15 @@ You also need a **mirrord for Teams license**. Register at [app.metalbear.com](h
 
 Check these before installing — most install failures trace back to one of them:
 
+- **Kubernetes version:** the Operator needs Kubernetes `1.22`+. Some features need newer:
+
+  | Feature | Minimum Kubernetes version |
+  | --- | --- |
+  | Agent as an ephemeral container (`agent.ephemeral`) | `1.23` |
+  | AppArmor profile for the agent (`agent.security_context`) | `1.30` |
+  | Queue splitting | `1.30` |
+  | Multi-cluster | `1.30` on the Primary cluster |
+  | Multi-cluster preview replicas with DB branching | `1.29` on the workload clusters |
 - **Permissions:** the Helm chart creates cluster-scoped objects (CRDs, ClusterRoles, an APIService, a PriorityClass for agent pods). Whoever runs `helm install` needs permission to create these — in most clusters, the `cluster-admin` role.
 - **Nodes:** Operator and agent images are built for `linux/amd64` and `linux/arm64`. Nodes where agents run need **Linux kernel 5.4+** and a containerd, CRI-O, or Docker runtime — most features work on older kernels, but traffic stealing can be unreliable before 5.4. An agent for a target runs on that target pod's node; a targetless agent can run on any node.
 - **Network:**
@@ -145,8 +154,8 @@ Most features are **off by default** and gated behind a Helm value under `operat
 | DB branching (per engine) | `operator.mysqlBranching`, `pgBranching`, `mariadbBranching`, `mongodbBranching`, `mssqlBranching`, `redisBranching`, `dynamodbBranching`, `clickhouseBranching`, `cockroachdbBranching`, `spannerBranching` |
 | Generic DB branching (user-supplied images) | `operator.genericBranching: true` (⚠️ lets branch creators run arbitrary images; restrict with `genericBranchConfig.dbPod.allowedImages`) |
 | Preview environments | `operator.previewEnv: true` — default on recent chart versions, so only needs setting explicitly on older ones (+ `operator.shareIngress.shareDomain` and the `mirrord-share-ingress` chart for link sharing) |
-| Multi-cluster orchestration | `operator.multiCluster.enabled: true` on the **primary** cluster; `operator.multiClusterMember: true` on members |
-| Preview environments as multi-cluster replicas | `operator.multiCluster.preview.mode: replicas` on **every** cluster (default `default-cluster`; needs operator/chart `3.193.0`+ and mirrord `3.247.0`+) |
+| Multi-cluster orchestration | `operator.multiCluster.enabled: true` on the **primary** cluster; `operator.multiClusterMember: true` on members (needs Kubernetes `1.30`+ on the Primary, `1.22`+ on downstream clusters — `1.30`+ on downstream clusters too if they use queue splitting) |
+| Preview environments as multi-cluster replicas | `operator.multiCluster.preview.mode: replicas` on **every** cluster (default `default-cluster`; needs operator/chart `3.193.0`+ and mirrord `3.247.0`+; workload clusters need Kubernetes `1.29`+ if the previews use DB branching, since the operator adds a native sidecar to the preview replicas) |
 | Prometheus metrics | `operator.metrics: true` |
 
 > For the specific minimum operator/CLI/chart versions each feature needs, see the corresponding feature skill (e.g. `mirrord-db-branching`, `mirrord-kafka`, `mirrord-prev-env`).
@@ -330,7 +339,7 @@ Coordinate upgrades: in-flight sessions can break. Check with `kubectl get sessi
 
 ## Response Guidelines
 
-1. **Check prerequisites** — kubectl, helm, cluster access, and that they have a Teams license. No license and no organization yet? Offer an agent-started trial (see Prerequisites) instead of stopping, and start it only once the user agrees.
+1. **Check prerequisites** — kubectl, helm, cluster access, and that they have a mirrord for Teams license. No license and no organization yet? Offer an agent-started trial (see Prerequisites) instead of stopping, and start it only once the user agrees.
 2. **Pick the auth path** — cloud API key (default) vs license key vs air-gapped PEM/license server. Never ask the user to share the secret value with you.
 3. **Never put secrets on the CLI or in committed values** — use Secret/GSM refs.
 4. **Enable only the features they need** — each is an `operator.*` flag; call out the generic-branching and preview security implications.
