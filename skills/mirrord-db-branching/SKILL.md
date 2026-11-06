@@ -597,6 +597,7 @@ A remote branch is a standalone `redis-server` by default. An app that connects 
   "feature": { "db_branches": [ {
     "id": "cache-redis",
     "type": "redis",
+    "location": "remote",
     "cluster": true,
     "connection": { "url": "REDIS_URL" },
     "copy": { "mode": "all" }
