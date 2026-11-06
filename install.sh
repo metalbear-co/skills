@@ -1,6 +1,6 @@
 #!/bin/sh
 # Install the mirrord Agent Skills for OpenCode, or any agent that reads a
-# skills directory (Codex, Cursor, Gemini CLI, ...).
+# skills directory (Codex, Devin, Cursor, Gemini CLI, ...).
 #
 #   curl -fsSL https://raw.githubusercontent.com/metalbear-co/skills/main/install.sh | sh
 #   sh install.sh --agent codex
@@ -21,6 +21,7 @@ Usage: install.sh [--agent <name>] [--dest <dir>]
 
   --agent opencode   ~/.config/opencode/skills   (default; honours XDG_CONFIG_HOME)
   --agent codex      ~/.agents/skills
+  --agent devin      ~/.agents/skills
   --agent claude     ~/.claude/skills
   --dest <dir>       install into <dir> instead of an agent default
 EOF
@@ -53,10 +54,10 @@ done
 if [ -z "$DEST" ]; then
 	case "$AGENT" in
 	opencode) DEST="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills" ;;
-	codex) DEST="$HOME/.agents/skills" ;;
+	codex | devin) DEST="$HOME/.agents/skills" ;;
 	claude) DEST="$HOME/.claude/skills" ;;
 	*)
-		echo "install.sh: unknown agent '$AGENT' (expected opencode, codex, or claude)" >&2
+		echo "install.sh: unknown agent '$AGENT' (expected opencode, codex, devin, or claude)" >&2
 		exit 2
 		;;
 	esac

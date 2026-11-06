@@ -37,6 +37,7 @@ The same script serves any agent that reads a skills directory:
 
 ```bash
 sh install.sh --agent codex     # ~/.agents/skills
+sh install.sh --agent devin     # ~/.agents/skills
 sh install.sh --agent claude    # ~/.claude/skills
 sh install.sh --dest <dir>      # anywhere else
 ```
