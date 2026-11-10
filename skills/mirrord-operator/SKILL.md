@@ -53,6 +53,7 @@ Trigger on questions like:
 
 Authoritative upstream sources:
 - [Operator install docs](https://metalbear.com/mirrord/docs/getting-started/quick-start/install-the-operator)
+- [Operator reference](https://metalbear.com/mirrord/docs/managing-mirrord/operator)
 - Chart `values.yaml`: https://raw.githubusercontent.com/metalbear-co/charts/main/mirrord-operator/values.yaml
 
 ## Prerequisites
@@ -363,6 +364,7 @@ Coordinate upgrades: in-flight sessions can break. Check with `kubectl get sessi
 ## Learn More
 
 - [Operator install docs](https://metalbear.com/mirrord/docs/getting-started/quick-start/install-the-operator)
+- [Operator reference](https://metalbear.com/mirrord/docs/managing-mirrord/operator)
 - [Chart values.yaml](https://raw.githubusercontent.com/metalbear-co/charts/main/mirrord-operator/values.yaml)
 - [License server (self-hosted)](https://metalbear.com/mirrord/docs/managing-mirrord/license-server)
 - [Pricing & plan tiers](https://metalbear.com/mirrord/pricing/)
