@@ -13,7 +13,7 @@ This project runs against a Kubernetes cluster. Use mirrord to run and verify co
 - Run anything in a target's context: `mirrord exec --target deployment/<name> [-n <namespace>] -- <command>`
   - Example: `mirrord exec --target deployment/api -- npm test`
 - Inspect a target's environment: `mirrord exec --target deployment/<name> -- env`
-- If `mirrord` is missing, don't install it yourself and never pipe a remote script into a shell. Point to https://metalbear.com/mirrord/docs/getting-started/installing-mirrord and let the user install it through their organization's approved path.
+- If `mirrord` is missing, don't install it yourself and never pipe a remote script into a shell. Point to https://metalbear.com/mirrord/docs/getting-started/quick-start/install-mirrord and let the user install it through their organization's approved path.
 
 ## Configuration
 
