@@ -64,6 +64,6 @@ mirrord operator status
 ## Learn more
 
 - [Operator install docs](https://metalbear.com/mirrord/docs/getting-started/quick-start/install-the-operator)
-- [Operator reference](https://metalbear.com/mirrord/docs/managing-mirrord/operator)
+- [Operator reference](https://metalbear.com/mirrord/docs/reference/operator)
 - [Chart values.yaml](https://raw.githubusercontent.com/metalbear-co/charts/main/mirrord-operator/values.yaml)
 - [Pricing & plan tiers](https://metalbear.com/mirrord/pricing/)

@@ -1,7 +1,7 @@
 # Common Issues
 
 > Sources:
-> - https://metalbear.com/mirrord/docs/managing-mirrord/operator
+> - https://metalbear.com/mirrord/docs/reference/operator
 > - https://metalbear.com/mirrord/docs/troubleshooting
 
 ## "Operator not found" when running mirrord
