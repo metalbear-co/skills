@@ -50,15 +50,18 @@ This skill covers the **MetalBear Cloud** deployment mode end to end: sessions-m
 | Make an ECS service targetable, onboard another service, rotate the key, fix a task that won't start after adding mirrord | **Track 1: ECS setup** |
 | Run or debug their service locally against an ECS service, write `mirrord-up.yaml`, use the IDE, fix a session that won't connect | **Track 2: developer session** |
 
-If a developer's ECS service isn't set up yet, and they have AWS access and want to, do Track 1 first. Otherwise give them this message for their platform team:
+A developer without AWS access can't tell whether their ECS service is set up yet. If it isn't, and they have AWS access and want to, do Track 1 first. Otherwise give them this message for their platform team; it covers both cases:
 
 ```text
 I'd like to run <SERVICE> locally against our ECS deployment with mirrord Beyond.
-It needs a one-time setup on the ECS service: a setup container and a few variables
-in the task definition, and the organization's serverless agent API key in Secrets Manager.
-Guide: https://metalbear.com/mirrord/docs/using-mirrord/beyond-kubernetes/ecs
-Please tell me the service name (MIRRORD_REMOTE_SERVICE) and environment
-(MIRRORD_REMOTE_ENVIRONMENT, if set) once it's done.
+If it's already set up, please send me:
+  - the exact value of MIRRORD_REMOTE_SERVICE on the task
+  - the exact value of MIRRORD_REMOTE_ENVIRONMENT on the task, or "not set"
+  - which MetalBear organization its API key belongs to
+If it isn't set up yet, it needs a one-time change to the ECS service: a setup container
+and a few variables in the task definition, and the organization's serverless agent
+API key in Secrets Manager. Guide:
+https://metalbear.com/mirrord/docs/using-mirrord/beyond-kubernetes/ecs
 ```
 
 ## The Shared Contract
@@ -86,20 +89,31 @@ The user needs the AWS CLI with permission to manage Secrets Manager secrets, IA
 <SERVICE_NAME> on ECS is ready for mirrord Beyond.
 1. Install mirrord 3.288.0 or later, then run: mirrord login
    (pick the <ORGANIZATION> organization in the browser)
-2. Add this service to mirrord-up.yaml (common.operator: false):
-     target: { path: serverless/<SERVICE_NAME> }
+2. Save this as mirrord-up.yaml in your project, with your local start command:
+
+     common:
+       operator: false
+     services:
+       <SERVICE_NAME>:
+         target:
+           path: serverless/<SERVICE_NAME>
+         run:
+           command: ["<your>", "<start>", "<command>"]
+
 3. Run: mirrord up --key <your-name>
    Requests with the header "baggage: mirrord-session=<your-name>" reach your machine.
 Docs: https://metalbear.com/mirrord/docs/using-mirrord/beyond-kubernetes
 ```
+
+If the task sets `MIRRORD_REMOTE_ENVIRONMENT`, add `namespace: <ENVIRONMENT>` under `target` in the message.
 
 To upgrade the bootstrap later, rerun the merge with the new image tag and redeploy. To remove mirrord, register the previous revision again and deploy it.
 
 ## Track 2: Developer Session
 
 1. **mirrord version.** `mirrord --version` must be 3.288.0 or later. If it isn't installed or is older, follow the [install docs](https://metalbear.com/mirrord/docs/getting-started/install-mirrord) (or the `mirrord-quickstart` skill). Never pipe a downloaded script into a shell.
-2. **Sign in.** Run `mirrord login`. It prints `Approve the login in your browser. If it does not open, visit:` and a URL, tries to open the browser, and waits up to 5 minutes. Run it so that the wait doesn't hit your tool's timeout (in the background, or with a timeout above 5 minutes), relay the URL, and tell the user to approve and **pick the organization that owns the ECS service's API key**. It finishes with `Logged in as <email>. The login is valid until <time>.` It doesn't show the organization, and there's no command that does: if in doubt, ask the user which one they picked. The sign-in isn't renewed automatically; when it expires, run `mirrord login` again.
-3. **Names.** Get the service name and environment from the platform team, or, with AWS read access, from the task definition (`MIRRORD_REMOTE_SERVICE`, `MIRRORD_REMOTE_ENVIRONMENT`; query in [troubleshooting](references/troubleshooting.md#which-side-is-it)). mirrord can't list mirrord Beyond targets yet. Never guess.
+2. **Sign in.** Run `mirrord login`. It prints `Approve the login in your browser. If it does not open, visit:` and a URL, tries to open the browser, and waits up to 5 minutes. Run it so that the wait doesn't hit your tool's timeout (in the background, or with a timeout above 5 minutes), relay the URL from its output, and tell the user to approve and **pick the organization that owns the ECS service's API key** (if they don't know which, the platform team does). It finishes with `Logged in as <email>. The login is valid until <time>.` It doesn't show the organization, and there's no command that does: if in doubt, ask the user which one they picked. The sign-in isn't renewed automatically; when it expires, run `mirrord login` again.
+3. **Names.** Get the service name and environment from the platform team, or, with AWS read access, from the task definition (`MIRRORD_REMOTE_SERVICE`, `MIRRORD_REMOTE_ENVIRONMENT`; query in [troubleshooting](references/troubleshooting.md#which-side-is-it)). mirrord can't list mirrord Beyond targets yet. Never guess. The environment is the exact `MIRRORD_REMOTE_ENVIRONMENT` value on the task, not the name of an ECS cluster, AWS account or stage: if the platform team says "staging", confirm that's the variable's value. If the variable isn't set, leave `namespace` out.
 4. **Run command.** Work out how the service starts locally from the project (`package.json` scripts, `Makefile`, `Procfile`, `pyproject.toml`, README) and confirm it with the user.
 5. **Write `mirrord-up.yaml`** in the project root. `common.operator: false` is required for MetalBear Cloud: without it, mirrord goes through the Operator if `~/.mirrord/mirrord.json` has `"operator": true` from an earlier Operator session, and fails with ``Feature `target.path` requires a mirrord Enterprise plan.``
 
@@ -128,9 +142,9 @@ To upgrade the bootstrap later, rerun the merge with the new image tag and redep
          command: ["npm", "start"]
    ```
 
-   The service runs in `split` mode by default: only requests with `baggage: mirrord-session=<KEY>` reach the local process. `default_mode: mirror` on the service (or `mirrord up --mode mirror`) copies traffic instead of taking it. To change the filter, set `http_filter` on the service (see the `mirrord-up` skill). A `serverless/` service can sit in the same file as services that target Kubernetes workloads.
+   The key under `services` (`payments` here) is a free-form label for the local service; what pairs it with the ECS task is `target.path` and `target.namespace`. The service runs in `split` mode by default: only requests with `baggage: mirrord-session=<KEY>` reach the local process. `default_mode: mirror` on the service (or `mirrord up --mode mirror`) copies traffic instead of taking it. To change the filter, set `http_filter` on the service (see the `mirrord-up` skill). A `serverless/` service can sit in the same file as services that target Kubernetes workloads.
 6. **Run it.** In the directory of `mirrord-up.yaml`: `mirrord up --key <KEY>` (without `--key`, the OS username is the session key). Check that mirrord prints `connecting through the MetalBear Cloud sessions-manager at https://sm-aws-use1.app.metalbear.com/sm`; if it names another sessions-manager, see [troubleshooting](references/troubleshooting.md#mirrord-output-on-the-developer-machine). Then send a request through the service's normal entry point (load balancer, API gateway) with the header: `curl -H "baggage: mirrord-session=<KEY>" <URL>`. In a browser, the mirrord browser extension can add the header.
-7. **From the IDE.** The VS Code and IntelliJ extensions don't run `mirrord up`. Use this as the extension's active `mirrord.json` instead; it starts the same `split` session:
+7. **From the IDE.** The VS Code and IntelliJ extensions don't run `mirrord up`. Use this as the extension's active `mirrord.json` instead; it starts the same session `split` mode does (`steal` with a header filter on the session key):
 
    ```json mirrord
    {

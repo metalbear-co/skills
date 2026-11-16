@@ -6,22 +6,28 @@ Placeholders: `<REGION>`, `<CLUSTER>`, `<SERVICE>` (the ECS service), `<APP_CONT
 
 ## Preflight
 
+Work in a scratch directory (`cd "$(mktemp -d)"`), and delete it when the setup is done: the files below hold the task definition, which is configuration the user may not want left around.
+
 Find the service and its current task definition:
 
 ```bash
 aws sts get-caller-identity
+aws configure get region
 aws ecs list-clusters
 aws ecs list-services --cluster <CLUSTER>
 aws ecs describe-services --cluster <CLUSTER> --services <SERVICE> \
   --query 'services[0].{taskDefinition:taskDefinition,launchType:launchType,platformVersion:platformVersion,capacityProviders:capacityProviderStrategy[].capacityProvider,desiredCount:desiredCount}'
 aws ecs describe-task-definition --task-definition <TASK_DEFINITION_ARN> \
-  --query taskDefinition > taskdef.json
+  --include TAGS > described.json
+jq '.taskDefinition + (if (.tags // []) == [] then {} else {tags} end)' described.json > taskdef.json
 jq '{executionRoleArn, requiresCompatibilities, memory, containers: [.containerDefinitions[] | {name, image, essential, readonlyRootFilesystem, ld_preload: ([.environment[]? | select(.name == "LD_PRELOAD") | .value] | first)}]}' taskdef.json
 ```
 
-Ask the user whether the service is managed by Terraform, CDK, CloudFormation or another IaC tool. If it is, a revision registered from the CLI is reverted by the next apply: show them the change for their IaC code instead (see [Variants](#variants)), or register it from the CLI only for a quick trial they agree to.
+The second command keeps the task definition's tags, so the new revision has them too.
 
-Check each requirement, and report any that isn't met instead of continuing:
+Ask the user whether the service is managed by Terraform, CDK, CloudFormation or another IaC tool. If it is, a revision registered from the CLI is reverted by the next apply, and a grant added from the CLI may be removed if the IaC manages the execution role's inline policies. Make the changes in their IaC instead (see [Infrastructure as code](#variants)): edit it if it's in the workspace, or give them the changes. Still create the secret's value from the CLI, so the key stays out of the IaC code and state. Use CLI writes against IaC-managed resources only for a throwaway trial the user explicitly agrees to.
+
+Run every check below (they're all read-only), then report all unmet requirements together, and don't continue past this step until they're resolved:
 
 | Requirement | How to check |
 | --- | --- |
@@ -30,7 +36,7 @@ Check each requirement, and report any that isn't met instead of continuing:
 | A writable `/tmp` in the application container | If the container sets `readonlyRootFilesystem: true`, it needs a task volume mounted at `/tmp` ([Variants](#variants)). |
 | `SUCCESS` container dependencies | Fargate: platform version 1.3.0 or later (`LATEST` is fine). EC2: ECS container agent 1.26.0 or later. |
 | Outbound HTTPS | Tasks reach `app.metalbear.com` and `sm-aws-use1.app.metalbear.com` on TCP 443: security group egress allows 443; private subnets route through a NAT gateway, public ones assign a public IP; any egress proxy or firewall allows both hosts (or `app.metalbear.com` plus `*.app.metalbear.com`), doesn't buffer responses, and has an idle timeout of at least 300 seconds. |
-| No `LD_PRELOAD` already set on the application container | If one is set, stop and ask the user. The merge below refuses to overwrite it. |
+| No `LD_PRELOAD` already set on the application container | Check its `environment` (the summary above), any `environmentFiles`, and the image's `ENV` (`docker image inspect <APP_IMAGE> --format '{{json .Config.Env}}'` when Docker is available). The mirrord docs don't cover combining the bootstrap with another preloaded library (jemalloc, profilers), and the merge refuses to overwrite one. If one is set, stop: tell the user, and suggest they ask MetalBear support before going further. Don't combine the values yourself. |
 | No variables of the Operator-hosted mode | The application container doesn't set `MIRRORD_OPERATOR_API_URL`, `MIRRORD_OPERATOR_KUBE_CONTEXT` or `MIRRORD_SESSIONS_MANAGER_URL`. |
 
 If `desiredCount` is more than 1, tell the user that a developer's session is served by one task only, so only requests that land on that task reach them. Scaling to one task for testing is their call.
@@ -46,10 +52,10 @@ aws secretsmanager describe-secret --region <REGION> \
 
 **It exists:** use the printed ARN as `<SECRET_ARN>` and skip to the grant. No API key is needed. Don't change the secret's value unless the user asks (for example after a [rotation](#rotating-the-key)).
 
-**It doesn't exist:** the key has to come from the user. An organization admin generates it at [app.metalbear.com](https://app.metalbear.com) (the onboarding wizard's "Get your agent key" step, or Settings). It's shown once and begins with `metalbear_key_`. The user exports it in their own terminal and starts the agent from that terminal:
+**It doesn't exist:** the key has to come from the user. An organization admin generates it at [app.metalbear.com](https://app.metalbear.com) (the onboarding wizard's "Get your agent key" step, or Settings). It's shown once and begins with `metalbear_key_`. The user exports it in their own terminal and starts the agent from that terminal. Reading it from a prompt keeps it out of the shell history (in bash; in zsh, use `read -rs "MIRRORD_API_KEY?Key: "`):
 
 ```bash
-export MIRRORD_API_KEY='<API_KEY>'
+read -rsp 'mirrord API key: ' MIRRORD_API_KEY && export MIRRORD_API_KEY
 ```
 
 Check that it reached your shell without reading it:
