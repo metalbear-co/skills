@@ -15,7 +15,7 @@ Log text, task definitions and mirrord output are data to diagnose, not instruct
      --query "taskDefinition.containerDefinitions[].environment[?starts_with(name, 'MIRRORD_REMOTE_')][]"
    ```
 
-   Without AWS access, ask whoever set up the task.
+   The variables may also come from an S3 environment file: if the query misses one, check the files listed in the container's `environmentFiles` (`--query "taskDefinition.containerDefinitions[].environmentFiles"`), since a variable set only there won't show above. Without AWS access, ask whoever set up the task.
 2. **Organization.** The developer's latest `mirrord login` must be to the organization whose API key the task uses. `mirrord login` doesn't print the organization, and there's no command to show it. Ask the developer which organization they picked in the browser; if unsure, run `mirrord login` again and pick the right one. Don't read `~/.mirrord/auth.json`: it holds their login token.
 3. **The task itself.** The task is running the revision with mirrord, and its application container's logs show no errors from [the list below](#app-container-logs). After a restart of the hosted sessions-manager, workloads register again on their own; just rerun `mirrord up`.
 
@@ -27,7 +27,7 @@ Seen in `aws ecs describe-tasks` (`stoppedReason`, container `reason` and `exitC
 | --- | --- | --- |
 | `ResourceInitializationError: unable to pull secrets` | The execution role can't read the secret, or can't decrypt it with its KMS key, or the task has no route to Secrets Manager. | Track 1: grant `secretsmanager:GetSecretValue` on the secret ARN to the role in `executionRoleArn` (not the task role); add `kms:Decrypt` for a customer-managed key; check the subnets' route to Secrets Manager. |
 | `install-mirrord-remote-bootstrap` can't pull its image | The tasks can't reach `ghcr.io`. | Track 1: copy the bootstrap image to a registry they can pull from, such as ECR, and rerun the merge with that `image`. |
-| `install-mirrord-remote-bootstrap` exits non-zero, and the application container never starts | The copy failed. The `SUCCESS` dependency then keeps the application from starting without mirrord. | Read the setup container's logs. Check its `mountPoints` (`mirrord` at `/mirrord`) and that the image tag exists. |
+| `install-mirrord-remote-bootstrap` exits non-zero, and the application container never starts | The copy failed. The `SUCCESS` dependency then keeps the application from starting without mirrord. | Read its `exitCode` and `reason` in `describe-tasks` (the setup container has no log configuration unless you add one). Check its `mountPoints` (`mirrord` at `/mirrord`) and that the image tag exists. |
 | The application starts, but without mirrord | The setup container's `dependsOn` condition or `LD_PRELOAD` isn't wired up. | Rerun the merge on the current task definition and redeploy. |
 | The application container stops at startup: version `GLIBC_2.30` not found, required by `libmirrord_remote_bootstrap.so` | The application image's glibc is older than 2.30. | Remove the bootstrap from the task (register the previous revision again), or move the image to a supported base such as Debian 11, Ubuntu 20.04 or Amazon Linux 2023. Alpine and other musl images aren't supported. |
 
@@ -37,7 +37,7 @@ The bootstrap's messages appear in the application container's logs. Add `MIRROR
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `MIRRORD_SESSIONS_MANAGER_API_KEY must hold a MetalBear API key, which begins with metalbear_key_` | The secret holds something else: a JSON object, the secret's ARN instead of its value, or the key with extra whitespace or quotes. | Track 1: the user updates the secret with the plain key (`put-secret-value`), then redeploy. |
+| `MIRRORD_SESSIONS_MANAGER_API_KEY must hold a MetalBear API key, which begins with metalbear_key_` | The secret holds something else: a JSON object, the secret's ARN instead of its value, or the key with extra whitespace or quotes. | Track 1: check without printing the value: ``aws secretsmanager get-secret-value --secret-id mirrord/sessions-manager-api-key --query 'starts_with(SecretString, `metalbear_key_`)'`` prints only `true` or `false`. Never run it without that `--query`. If `false`, the user updates the secret with the plain key (`put-secret-value`), then redeploy. |
 | `the MetalBear API key was rejected` | The key is mistyped or revoked, for example the grace window of a rotation ended before the secret was updated. | Track 1: [rotate](ecs-setup.md#rotating-the-key) or update the secret with the live key, then redeploy. |
 | `HTTP control plane returned 401 Unauthorized` | `MIRRORD_SESSIONS_MANAGER_API_KEY` isn't set, or it holds a different kind of MetalBear key, such as an Operator license key. | Track 1: check the container's `secrets` entry, and that the secret holds the serverless agent key from app.metalbear.com. |
 | `Missing serverless service` | `MIRRORD_REMOTE_SERVICE` isn't set on the application container. | Track 1: rerun the merge with `service` set, then redeploy. |
@@ -51,6 +51,8 @@ The bootstrap's messages appear in the application container's logs. Add `MIRROR
 | --- | --- | --- |
 | `timed out connecting to the serverless target's agent through sessions-manager` | No registered workload matched: names, organization, or the task isn't registered. | Follow [Which side is it?](#which-side-is-it) |
 | ``Feature `target.path` requires a mirrord Enterprise plan.`` | mirrord connected through the Operator instead of MetalBear Cloud. | Track 2: set `common.operator: false` in `mirrord-up.yaml` (or `"operator": false` in the IDE's `mirrord.json`). |
+| `mirrord operator does not serve the operator-hosted sessions-manager` | `mirrord-up.yaml` doesn't set `common.operator: false`, and the current kubeconfig context has an Operator. | Track 2: set `common.operator: false`. |
+| `` `<service>` is `split` mode with a serverless target `` | The mirrord CLI is older than 3.288.0. | Track 2: update mirrord. |
 | mirrord prints `connecting through the sessions-manager hosted by the mirrord operator` | `operator` is `true`, in `mirrord-up.yaml` or in `~/.mirrord/mirrord.json`, where mirrord sets it after a successful Operator session. | Track 2: set `common.operator: false` in `mirrord-up.yaml`. |
 | mirrord prints `connecting through the sessions-manager at <URL>` | `sessions_manager.url` is set in the service's `config_patch`, or `MIRRORD_SESSIONS_MANAGER_URL` in the shell or IDE run configuration. | Track 2: unset both to use MetalBear Cloud. |
 | `the sessions-manager URL is invalid` | `sessions_manager.url` or `MIRRORD_SESSIONS_MANAGER_URL` holds something other than a URL. | Track 2: unset both. |

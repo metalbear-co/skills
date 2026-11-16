@@ -19,11 +19,11 @@ aws ecs describe-services --cluster <CLUSTER> --services <SERVICE> \
   --query 'services[0].{taskDefinition:taskDefinition,launchType:launchType,platformVersion:platformVersion,capacityProviders:capacityProviderStrategy[].capacityProvider,desiredCount:desiredCount}'
 aws ecs describe-task-definition --task-definition <TASK_DEFINITION_ARN> \
   --include TAGS > described.json
-jq '.taskDefinition + (if (.tags // []) == [] then {} else {tags} end)' described.json > taskdef.json
+jq '.taskDefinition + ([.tags[]? | select(.key | startswith("aws:") | not)] | if . == [] then {} else {tags: .} end)' described.json > taskdef.json
 jq '{executionRoleArn, requiresCompatibilities, memory, containers: [.containerDefinitions[] | {name, image, essential, readonlyRootFilesystem, ld_preload: ([.environment[]? | select(.name == "LD_PRELOAD") | .value] | first)}]}' taskdef.json
 ```
 
-The second command keeps the task definition's tags, so the new revision has them too.
+The second command keeps the task definition's tags, so the new revision has them too, except the reserved `aws:` ones, which `register-task-definition` refuses.
 
 Ask the user whether the service is managed by Terraform, CDK, CloudFormation or another IaC tool. If it is, a revision registered from the CLI is reverted by the next apply, and a grant added from the CLI may be removed if the IaC manages the execution role's inline policies. Make the changes in their IaC instead (see [Infrastructure as code](#variants)): edit it if it's in the workspace, or give them the changes. Still create the secret's value from the CLI, so the key stays out of the IaC code and state. Use CLI writes against IaC-managed resources only for a throwaway trial the user explicitly agrees to.
 
@@ -36,7 +36,7 @@ Run every check below (they're all read-only), then report all unmet requirement
 | A writable `/tmp` in the application container | If the container sets `readonlyRootFilesystem: true`, it needs a task volume mounted at `/tmp` ([Variants](#variants)). |
 | `SUCCESS` container dependencies | Fargate: platform version 1.3.0 or later (`LATEST` is fine). EC2: ECS container agent 1.26.0 or later. |
 | Outbound HTTPS | Tasks reach `app.metalbear.com` and `sm-aws-use1.app.metalbear.com` on TCP 443: security group egress allows 443; private subnets route through a NAT gateway, public ones assign a public IP; any egress proxy or firewall allows both hosts (or `app.metalbear.com` plus `*.app.metalbear.com`), doesn't buffer responses, and has an idle timeout of at least 300 seconds. |
-| No `LD_PRELOAD` already set on the application container | Check its `environment` (the summary above), any `environmentFiles`, and the image's `ENV` (`docker image inspect <APP_IMAGE> --format '{{json .Config.Env}}'` when Docker is available). The mirrord docs don't cover combining the bootstrap with another preloaded library (jemalloc, profilers), and the merge refuses to overwrite one. If one is set, stop: tell the user, and suggest they ask MetalBear support before going further. Don't combine the values yourself. |
+| No `LD_PRELOAD` on the application container other than mirrord's own `/opt/mirrord/lib/libmirrord_remote_bootstrap.so` (which is there on a rerun or upgrade, and is fine) | Check its `environment` (the summary above), any `environmentFiles`, and the image's `ENV` (`docker image inspect <APP_IMAGE> --format '{{json .Config.Env}}'` when Docker is available; otherwise ask the user). The task's `environment` overrides both, so a value there would be lost silently. The mirrord docs don't cover combining the bootstrap with another preloaded library (jemalloc, profilers), and the merge refuses to overwrite one. If one is set, stop: tell the user, and suggest they ask MetalBear support before going further. Don't combine the values yourself. |
 | No variables of the Operator-hosted mode | The application container doesn't set `MIRRORD_OPERATOR_API_URL`, `MIRRORD_OPERATOR_KUBE_CONTEXT` or `MIRRORD_SESSIONS_MANAGER_URL`. |
 
 If `desiredCount` is more than 1, tell the user that a developer's session is served by one task only, so only requests that land on that task reach them. Scaling to one task for testing is their call.
@@ -52,7 +52,7 @@ aws secretsmanager describe-secret --region <REGION> \
 
 **It exists:** use the printed ARN as `<SECRET_ARN>` and skip to the grant. No API key is needed. Don't change the secret's value unless the user asks (for example after a [rotation](#rotating-the-key)).
 
-**It doesn't exist:** the key has to come from the user. An organization admin generates it at [app.metalbear.com](https://app.metalbear.com) (the onboarding wizard's "Get your agent key" step, or Settings). It's shown once and begins with `metalbear_key_`. The user exports it in their own terminal and starts the agent from that terminal. Reading it from a prompt keeps it out of the shell history (in bash; in zsh, use `read -rs "MIRRORD_API_KEY?Key: "`):
+**It doesn't exist:** the key has to come from the user. An organization admin generates it at [app.metalbear.com](https://app.metalbear.com) (the onboarding wizard's "Get your agent key" step, or Settings). It's shown once and begins with `metalbear_key_`. The user exports it in their own terminal and starts the agent from that terminal. Reading it from a prompt keeps it out of the shell history (this is bash; in zsh, the default on macOS, use `read -rs "MIRRORD_API_KEY?mirrord API key: " && export MIRRORD_API_KEY`):
 
 ```bash
 read -rsp 'mirrord API key: ' MIRRORD_API_KEY && export MIRRORD_API_KEY
@@ -117,6 +117,11 @@ Save this filter as `merge.jq`:
 # Args: container, service, environment ("" = default), secret_arn, image, ec2_memory (true/false).
 def upsert($key; $items):
   ((. // []) | map(. as $old | select(any($items[]; .[$key] == $old[$key]) | not))) + $items;
+# Removes the entries matching cond from list field $f, if it has any, and drops the field when
+# only mirrord's entries were in it.
+def strip($f; cond):
+  if any((.[$f] // [])[]; cond) then .[$f] |= map(select(cond | not)) | (if .[$f] == [] then del(.[$f]) else . end)
+  else . end;
 
 "/opt/mirrord/lib/libmirrord_remote_bootstrap.so" as $lib
 | "install-mirrord-remote-bootstrap" as $setup
@@ -140,7 +145,14 @@ def upsert($key; $items):
                 {name: "MIRRORD_REMOTE_SERVICE", value: $service}
               ] + (if $environment == "" then [] else [{name: "MIRRORD_REMOTE_ENVIRONMENT", value: $environment}] end)))
         | .secrets |= upsert("name"; [{name: "MIRRORD_SESSIONS_MANAGER_API_KEY", valueFrom: $secret_arn}])
-      else . end
+      elif .name == $setup then .
+      else
+        # mirrord moved to another container: remove it from this one.
+        strip("environment"; (.name == "LD_PRELOAD" and .value == $lib) or .name == "MIRRORD_REMOTE_SERVICE" or .name == "MIRRORD_REMOTE_ENVIRONMENT")
+        | strip("secrets"; .name == "MIRRORD_SESSIONS_MANAGER_API_KEY")
+        | strip("mountPoints"; .sourceVolume == "mirrord")
+        | strip("dependsOn"; .containerName == $setup)
+      end
     )
     | upsert("name"; [
         {
@@ -158,10 +170,10 @@ def upsert($key; $items):
 Run it:
 
 ```bash
-jq --arg container <APP_CONTAINER> \
-   --arg service <SERVICE_NAME> \
-   --arg environment "" \
-   --arg secret_arn <SECRET_ARN> \
+jq --arg container '<APP_CONTAINER>' \
+   --arg service '<SERVICE_NAME>' \
+   --arg environment '' \
+   --arg secret_arn '<SECRET_ARN>' \
    --arg image ghcr.io/metalbear-co/mirrord-remote-bootstrap:3.229.0 \
    --argjson ec2_memory false \
    -f merge.jq taskdef.json > taskdef-mirrord.json
