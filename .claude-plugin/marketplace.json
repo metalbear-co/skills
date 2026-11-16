@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "mirrord",
-      "description": "Connect your agent to a live Kubernetes cluster with mirrord, so it tests code changes against real services. Covers setup, config, Amazon ECS through mirrord Beyond, CI, database branching, queue splitting, and preview environments.",
+      "description": "Connect your agent to a live Kubernetes cluster with mirrord, so it tests code changes against real services. Covers setup, config, CI, database branching, queue splitting, and preview environments.",
       "source": "./",
       "version": "1.2.0",
       "category": "development",

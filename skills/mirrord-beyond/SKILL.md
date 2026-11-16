@@ -144,8 +144,8 @@ To upgrade the bootstrap later, rerun the merge with the new image tag and redep
    ```
 
    The key under `services` (`payments` here) is a free-form label for the local service; what pairs it with the ECS task is `target.path` and `target.namespace`. The service runs in `split` mode by default: only requests with `baggage: mirrord-session=<KEY>` reach the local process. `default_mode: mirror` on the service (or `mirrord up --mode mirror`) copies traffic instead of taking it. To change the filter, set `http_filter` on the service (see the `mirrord-up` skill). A `serverless/` service can sit in the same file as services that target Kubernetes workloads.
-6. **Run it.** In the directory of `mirrord-up.yaml`: `mirrord up --key <KEY>` (without `--key`, the OS username is the session key). Check that mirrord prints `connecting through the MetalBear Cloud sessions-manager at https://sm-aws-use1.app.metalbear.com/sm`; if it names another sessions-manager, see [troubleshooting](references/troubleshooting.md#mirrord-output-on-the-developer-machine). Then send a request through the service's normal entry point (load balancer, API gateway) with the header: `curl -H "baggage: mirrord-session=<KEY>" <URL>`. In a browser, the mirrord browser extension can add the header.
-7. **From the IDE.** The VS Code and IntelliJ extensions don't run `mirrord up`. Use this as the extension's active `mirrord.json` instead; it starts the same session `split` mode does (`steal` with a header filter on the session key):
+6. **Run it.** In the directory of `mirrord-up.yaml`: `mirrord up --key <KEY>` (without `--key`, the OS username is the session key). The key goes into a regex filter, so pick one of letters, digits, `-` and `_`. `mirrord up`'s default filter also matches longer keys that start with yours (`alice` matches `alice2`), so agree on keys within the team that aren't prefixes of each other, or set a stricter `http_filter` like the one in the IDE example below. Check that mirrord prints `connecting through the MetalBear Cloud sessions-manager at https://sm-aws-use1.app.metalbear.com/sm`; if it names another sessions-manager, see [troubleshooting](references/troubleshooting.md#mirrord-output-on-the-developer-machine). Then send a request through the service's normal entry point (load balancer, API gateway) with the header: `curl -H "baggage: mirrord-session=<KEY>" <URL>`. In a browser, the mirrord browser extension can add the header.
+7. **From the IDE.** The VS Code and IntelliJ extensions don't run `mirrord up`. Use this as the extension's active `mirrord.json` instead. It starts the kind of session `split` mode does (`steal` with a header filter on the session key), with a filter that matches the whole `mirrord-session` baggage member, so `alice` doesn't also take `alice2`'s requests. If the task sets `MIRRORD_REMOTE_ENVIRONMENT`, add `"namespace": "<ENVIRONMENT>"` under `target`:
 
    ```json mirrord
    {
@@ -159,7 +159,7 @@ To upgrade the bootstrap later, rerun the merge with the new image tag and redep
          "incoming": {
            "mode": "steal",
            "http_filter": {
-             "header_filter": "^baggage: .*mirrord-session={{ key }}.*$"
+             "header_filter": "^baggage:\\s*(.*,\\s*)?mirrord-session={{ key }}\\s*([,;].*)?$"
            }
          }
        }

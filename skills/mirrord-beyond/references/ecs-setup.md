@@ -64,12 +64,12 @@ Check that it reached your shell without reading it:
 test -n "$MIRRORD_API_KEY" && echo set
 ```
 
-Then create the secret. The shell expands the variable, so the key goes to AWS without passing through the chat:
+Then create the secret. `printf` is a shell builtin and the AWS CLI reads the value from standard input, so the key goes to AWS without passing through the chat or appearing in any process's arguments:
 
 ```bash
-aws secretsmanager create-secret --region <REGION> \
+printf %s "$MIRRORD_API_KEY" | aws secretsmanager create-secret --region <REGION> \
   --name mirrord/sessions-manager-api-key \
-  --secret-string "$MIRRORD_API_KEY" \
+  --secret-string file:///dev/stdin \
   --query ARN --output text
 ```
 
@@ -107,7 +107,9 @@ The merge adds, to the task definition from [Preflight](#preflight):
 - a non-essential setup container, `install-mirrord-remote-bootstrap`, that copies the bootstrap library into the volume;
 - on the application container: a `SUCCESS` dependency on the setup container, the volume mounted read-only at `/opt/mirrord/lib`, the `LD_PRELOAD`, `MIRRORD_REMOTE_SERVICE` and (when set) `MIRRORD_REMOTE_ENVIRONMENT` variables, and the API key secret as `MIRRORD_SESSIONS_MANAGER_API_KEY`.
 
-It keeps every existing field, container, variable, secret, mount and dependency; changes only the named application container; replaces mirrord's own entries on a rerun instead of duplicating them (so it's also how to upgrade the bootstrap tag); and removes the read-only fields `register-task-definition` rejects. It stops with an error if the container doesn't exist, or if the container already sets a different `LD_PRELOAD`.
+It keeps every existing field, container, variable, secret, mount and dependency; changes only the named application container (other containers, including any that already load mirrord, stay as they are); replaces mirrord's own entries on a rerun instead of duplicating them, keeping settings added to the setup container such as `logConfiguration` (so it's also how to upgrade the bootstrap tag); and removes the read-only fields `register-task-definition` rejects. It stops with an error if the container doesn't exist or is the setup container itself, if the container already sets a different `LD_PRELOAD`, or if the task already has a configured volume named `mirrord`.
+
+If the preflight summary shows mirrord's `LD_PRELOAD` on a container other than the one you're onboarding (for example, it was added to the wrong container earlier), ask the user whether that container should keep it. If not, remove mirrord's entries from it by hand (`LD_PRELOAD`, `MIRRORD_REMOTE_*`, `MIRRORD_SESSIONS_MANAGER_API_KEY`, the `mirrord` mount, the dependency on the setup container) and show them the diff.
 
 Save this filter as `merge.jq`:
 
@@ -117,17 +119,16 @@ Save this filter as `merge.jq`:
 # Args: container, service, environment ("" = default), secret_arn, image, ec2_memory (true/false).
 def upsert($key; $items):
   ((. // []) | map(. as $old | select(any($items[]; .[$key] == $old[$key]) | not))) + $items;
-# Removes the entries matching cond from list field $f, if it has any, and drops the field when
-# only mirrord's entries were in it.
-def strip($f; cond):
-  if any((.[$f] // [])[]; cond) then .[$f] |= map(select(cond | not)) | (if .[$f] == [] then del(.[$f]) else . end)
-  else . end;
-
 "/opt/mirrord/lib/libmirrord_remote_bootstrap.so" as $lib
 | "install-mirrord-remote-bootstrap" as $setup
-| if any(.containerDefinitions[]; .name == $container) then .
+| if $container == $setup then error("\($setup) is mirrord's setup container, not the application container")
+  elif any(.containerDefinitions[]; .name == $container) then .
   else error("no container named \"\($container)\" in the task definition; its containers are: \([.containerDefinitions[].name] | join(", "))")
   end
+| if any(.volumes[]?; .name == "mirrord" and (keys - ["name"]) != []) then
+    error("the task definition already has a configured volume named \"mirrord\"; stop and ask the user")
+  else . end
+| ((.containerDefinitions[] | select(.name == $setup)) // {}) as $old_setup
 | ([.containerDefinitions[] | select(.name == $container) | .environment[]? | select(.name == "LD_PRELOAD" and .value != $lib)] | first) as $preload
 | if $preload == null then .
   else error("container \"\($container)\" already sets LD_PRELOAD=\($preload.value); stop and ask the user before combining it with \($lib)")
@@ -145,17 +146,11 @@ def strip($f; cond):
                 {name: "MIRRORD_REMOTE_SERVICE", value: $service}
               ] + (if $environment == "" then [] else [{name: "MIRRORD_REMOTE_ENVIRONMENT", value: $environment}] end)))
         | .secrets |= upsert("name"; [{name: "MIRRORD_SESSIONS_MANAGER_API_KEY", valueFrom: $secret_arn}])
-      elif .name == $setup then .
-      else
-        # mirrord moved to another container: remove it from this one.
-        strip("environment"; (.name == "LD_PRELOAD" and .value == $lib) or .name == "MIRRORD_REMOTE_SERVICE" or .name == "MIRRORD_REMOTE_ENVIRONMENT")
-        | strip("secrets"; .name == "MIRRORD_SESSIONS_MANAGER_API_KEY")
-        | strip("mountPoints"; .sourceVolume == "mirrord")
-        | strip("dependsOn"; .containerName == $setup)
-      end
+      else . end
     )
+    # On a rerun, keep any settings added to the setup container (logging, registry credentials).
     | upsert("name"; [
-        {
+        $old_setup + {
           name: $setup,
           image: $image,
           essential: false,
@@ -179,7 +174,7 @@ jq --arg container '<APP_CONTAINER>' \
    -f merge.jq taskdef.json > taskdef-mirrord.json
 ```
 
-- `environment`: leave it `""` unless the user wants a named environment; developers then leave `target.namespace` unset too.
+- `environment`: leave it `""` unless the user wants a named environment; developers then leave `target.namespace` unset too. If one of the container's `environmentFiles` sets `MIRRORD_REMOTE_ENVIRONMENT`, the merge doesn't see it and the task registers under that value: pass the same value here, or remove it from the file, so what you tell developers matches.
 - `ec2_memory`: `true` only for the EC2 launch type when the task definition has no task-level `memory`, since ECS then needs a memory setting on every container. It gives the setup container `memoryReservation: 32` (MiB).
 - `image`: pin a release tag, `3.229.0` or later. Never `latest`. Bootstrap tags follow Operator releases, not CLI versions.
 
@@ -256,9 +251,9 @@ The app.metalbear.com onboarding wizard marks the step "Task connected" once a t
 2. The user exports the new key as `MIRRORD_API_KEY` (as in [Store the API key](#store-the-api-key)), and you update the secret:
 
    ```bash
-   aws secretsmanager put-secret-value --region <REGION> \
+   printf %s "$MIRRORD_API_KEY" | aws secretsmanager put-secret-value --region <REGION> \
      --secret-id mirrord/sessions-manager-api-key \
-     --secret-string "$MIRRORD_API_KEY"
+     --secret-string file:///dev/stdin
    ```
 
 3. Redeploy every service that uses the secret before the window ends, after the user's go-ahead. Tasks read the secret only when they start:
@@ -283,8 +278,8 @@ Once the old key is revoked, new registrations with it are refused; sessions alr
 
 | Step | Terraform resources |
 | --- | --- |
-| Store the API key | `aws_secretsmanager_secret`, `aws_secretsmanager_secret_version`, `aws_iam_role_policy` |
+| Store the API key | `aws_secretsmanager_secret` (the secret only, not its value), `aws_iam_role_policy` |
 | Allow outbound HTTPS | `aws_vpc_security_group_egress_rule` |
 | Merge the task definition | `aws_ecs_task_definition` (the fragment in [Merge the task definition](#merge-the-task-definition)) |
 
-Keep the API key out of the Terraform code and state where possible: create the secret's value outside Terraform (with the `create-secret` command above) and reference the secret by name.
+Keep the API key out of the Terraform code and state: don't put it in a secret version resource, whose value Terraform stores in state. Set the value from the CLI with the `put-secret-value` command in [Rotating the key](#rotating-the-key), after Terraform creates the secret, or create the whole secret from the CLI and reference it by name.
