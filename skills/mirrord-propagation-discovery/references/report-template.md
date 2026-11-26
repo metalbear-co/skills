@@ -107,7 +107,7 @@ services:
       command: ["./gradlew", "bootRun"]
 ```
 
-When the repository already has a `mirrord-up.yaml`, this section names that file instead. Say which services got a new `http_filter`, quote the filter each one had before, and give `mirrord up -m mirror` for the first check.
+When the repository already has a `mirrord-up.yaml`, this section names that file instead. Say which services got a new `http_filter`, quote the filter each one had before, and give `mirrord up -f <that file> --key <your-name> -m mirror` for the first check.
 
 ## Next steps
 

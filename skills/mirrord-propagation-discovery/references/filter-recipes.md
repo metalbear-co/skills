@@ -303,7 +303,7 @@ services:
       command: ["./gradlew", "bootRun"]
 ```
 
-Run it with `mirrord up -f .mirrord/mirrord-up.yaml --key alice`. Change `default_mode` to `split` (or delete the line, `split` is the default) once only the developer's requests arrive. An existing file whose services are already in `split` can get its first check without an edit: `mirrord up -m mirror` sets every service to mirror mode for that run.
+Run it with `mirrord up -f .mirrord/mirrord-up.yaml --key alice`. Change `default_mode` to `split` (or delete the line, `split` is the default) once only the developer's requests arrive. An existing file whose services are already in `split` can get its first check without an edit: `mirrord up -f <that file> --key alice -m mirror` sets every service to mirror mode for that run.
 
 The JWT `sub` recipe on one service, as single-quoted YAML:
 
@@ -325,7 +325,7 @@ http_filter:
 
 ### Verification file for `mirrord up`
 
-Step 6 of the skill writes this one-service file to the dump directory, so the filter is tested through `mirrord up` before the developer's own commands run. Copy `target` and `http_filter` from the output file, and replace the path to the recorder with its absolute path on this machine. Without `run.directory`, the command runs in the directory that `mirrord up` started from.
+Step 6 of the skill writes this one-service file to the dump directory, so the filter is tested through `mirrord up` before the developer's own commands run. Copy `target` and `http_filter` from the output file, plus its `common` block if it has one, and replace the path to the recorder with its absolute path on this machine. Without `run.directory`, the command runs in the directory that `mirrord up` started from.
 
 ```yaml mirrord-up
 services:
@@ -341,4 +341,4 @@ services:
       command: ["python3", "/path/to/mirrord-propagation-discovery/scripts/request_recorder.py", "--port", "8080", "--header", "baggage"]
 ```
 
-Run it with `mirrord up -f "$DUMP_DIR/verify-up.yaml" --key alice`.
+Run it with `mirrord up -f "$DUMP_DIR/verify-up.yaml" --key alice --context <context you dumped>`. `--context` overrides every `context` in the file, so the check runs on the cluster where the filter was found.
