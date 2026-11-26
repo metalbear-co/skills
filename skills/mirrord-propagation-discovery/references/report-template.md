@@ -69,6 +69,36 @@ Saved to `.mirrord/mirrord.json`. Run with `mirrord exec -f .mirrord/mirrord.jso
 
 Change `target.path` and both `ports` for `gateway` (8080) or `inventory` (9090); the filter is the same.
 
+When the developer runs several services with `mirrord up`, this section is `## mirrord-up.yaml` instead, with one entry for each service they run locally:
+
+> Saved to `.mirrord/mirrord-up.yaml`. Run with `mirrord up -f .mirrord/mirrord-up.yaml --key <your-name>` and send requests with `-H "baggage: mirrord-session=<your-name>"`. Mirror mode first; change `default_mode` to `split` once only your requests arrive.
+
+```yaml mirrord-up
+services:
+  orders:
+    target:
+      path: deployment/orders
+      namespace: staging
+    default_mode: mirror
+    http_filter:
+      header_filter: '^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$'
+      ports: [8080]
+    run:
+      command: ["npm", "run", "dev"]
+  inventory:
+    target:
+      path: deployment/inventory
+      namespace: staging
+    default_mode: mirror
+    http_filter:
+      header_filter: '^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$'
+      ports: [9090]
+    run:
+      command: ["./gradlew", "bootRun"]
+```
+
+For an existing `mirrord-up.yaml`, say which services got a new `http_filter`, quote the filter each one had before, and give `mirrord up -m mirror` for the first check.
+
 ## Next steps
 
 1. `inventory → billing`: add the OTel transport to the billing client so `baggage` reaches billing (`mirrord-header-propagation`).

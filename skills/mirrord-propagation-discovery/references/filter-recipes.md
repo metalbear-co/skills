@@ -1,6 +1,6 @@
 # Filter recipes
 
-How to turn a discovered identifier into `feature.network.incoming.http_filter`. Every block below validates against the mirrord config schema.
+How to turn a discovered identifier into `feature.network.incoming.http_filter` in `mirrord.json`, or into `services.<name>.http_filter` in `mirrord-up.yaml` (see [In `mirrord-up.yaml`](#in-mirrord-upyaml) at the end). Every block below validates against the mirrord config schema or the mirrord up schema.
 
 Rules that apply to all of them:
 
@@ -260,3 +260,85 @@ Mirror mode, filter on the discovered identifier, ports pinned. Health checks ca
 ```
 
 Switch `"mode"` to `"steal"` once the mirror run shows only the developer's requests arriving locally.
+
+## In `mirrord-up.yaml`
+
+`mirrord up` takes the same filter object on each service. Every recipe above keeps its structure; only its place and its string quoting change.
+
+| `mirrord.json` | `mirrord-up.yaml` |
+|----------------|-------------------|
+| `target.path`, `target.namespace` | `services.<name>.target.path`, `services.<name>.target.namespace` |
+| `feature.network.incoming.http_filter` | `services.<name>.http_filter` |
+| `feature.network.incoming.mode`: `mirror` / `steal` | `services.<name>.default_mode`: `mirror` / `split` (`split` steals the requests that match the filter) |
+| `feature.network.incoming.ports` | no dedicated field: set `http_filter.ports`, and ports outside it are not stolen |
+| `--key alice` on `mirrord exec` | `--key alice` on `mirrord up`; without it, the key is the OS username |
+
+**Quote regexes and jq programs with single quotes.** Inside a single-quoted YAML string a backslash is a plain character, so the string is the decoded JSON value: `\\s` in a JSON recipe becomes `\s`, `\"` becomes `"`, and the `\\\\s` in the JWT recipe becomes `\\s`. Write a `'` inside the string as `''`. Unquoted YAML is not safe here, because `: `, ` #` and a leading `{` or `[` change what the value means. `{{ key }}` works as in `mirrord.json`: `mirrord up` renders the whole file as a template before it parses the YAML, so the key lands inside the quotes. A key that contains a `'` would end the string early.
+
+**Set `http_filter` on every service, also for `baggage`.** A service with no `http_filter` gets `baggage: .*mirrord-session={key}.*`. That regex has no member boundary, so a session keyed `alice` also matches `mirrord-session=alice2`.
+
+Two services on the baggage member, in mirror mode for the first run:
+
+```yaml mirrord-up
+services:
+  orders:
+    target:
+      path: deployment/orders
+      namespace: staging
+    default_mode: mirror
+    http_filter:
+      header_filter: '^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$'
+      ports: [8080]
+    run:
+      command: ["npm", "run", "dev"]
+  inventory:
+    target:
+      path: deployment/inventory
+      namespace: staging
+    default_mode: mirror
+    http_filter:
+      header_filter: '^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$'
+      ports: [9090]
+    run:
+      command: ["./gradlew", "bootRun"]
+```
+
+Run it with `mirrord up -f .mirrord/mirrord-up.yaml --key alice`. Change `default_mode` to `split` (or delete the line, `split` is the default) once only the developer's requests arrive. An existing file whose services are already in `split` can get its first check without an edit: `mirrord up -m mirror` sets every service to mirror mode for that run.
+
+The JWT `sub` recipe on one service, as single-quoted YAML:
+
+```yaml mirrord-up=services.*
+http_filter:
+  header_filter_jq: 'try (select(startswith("authorization: ")) | sub("^authorization: [Bb]earer\\s+"; "") | split(".") | select(length == 3) | .[1] | gsub("-"; "+") | gsub("_"; "/") | . as $s | ($s | length % 4) as $r | (if $r == 0 then $s else $s + ("=" * (4 - $r)) end) | @base64d | fromjson | .sub == "{{ key }}") catch false'
+  ports: [8080]
+```
+
+A combinator, with a header entry and a jq entry:
+
+```yaml mirrord-up=services.*
+http_filter:
+  any_of:
+    - header: '^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$'
+    - query: 'select(startswith("x-auth-request-email: ")) | ltrimstr("x-auth-request-email: ") | ascii_downcase == ("{{ key }}" | ascii_downcase)'
+  ports: [8080]
+```
+
+### Verification file for `mirrord up`
+
+Step 6 of the skill writes this one-service file to the dump directory, so the filter is tested through `mirrord up` before the developer's own commands run. Copy `target` and `http_filter` from the output file, and replace the path to the recorder with its absolute path on this machine. Without `run.directory`, the command runs in the directory that `mirrord up` started from.
+
+```yaml mirrord-up
+services:
+  orders:
+    target:
+      path: deployment/orders
+      namespace: staging
+    default_mode: mirror
+    http_filter:
+      header_filter: '^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$'
+      ports: [8080]
+    run:
+      command: ["python3", "/path/to/mirrord-propagation-discovery/scripts/request_recorder.py", "--port", "8080", "--header", "baggage"]
+```
+
+Run it with `mirrord up -f "$DUMP_DIR/verify-up.yaml" --key alice`.

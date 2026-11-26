@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Stand-in local process for verifying a mirrord filter.
 
-Run it under `mirrord exec` instead of the real service. It binds the service's
+Run it under `mirrord exec`, or as the `run.command` of a `mirrord up` service,
+instead of the real service. It binds the service's
 port, logs every request it receives with the identifier header, and answers
 200 with an empty JSON object. It performs no writes, so a request that mirror
 mode copies to it has no side effects, unlike running the real service locally.

@@ -8,20 +8,21 @@ description: >
   developer's traffic, and settable by that developer. Runs mirror-only dumps on each service,
   sends a tagged probe request at the edge or observes real traffic, scores the candidates, and
   produces the matching `http_filter` (regex, jq on headers, path, method, body, or combinations)
-  plus a per-hop report of where each identifier is dropped. Installs the mirrord CLI through a
-  package manager when it is missing. Use when the user asks what to filter on, whether the
-  cluster already propagates a request id or trace context, how to isolate their own requests on
-  a shared staging cluster, how to filter on a JWT or cookie with mirrord, or wants to inspect
-  live traffic with mirrord dump. Changes no application code: propagation gaps go to the
-  mirrord-header-propagation skill.
+  in a `mirrord.json` or on every service of a `mirrord-up.yaml`, plus a per-hop report of where
+  each identifier is dropped. Installs the mirrord CLI through a package manager when it is
+  missing. Use when the user asks what to filter on, whether the cluster already propagates a
+  request id or trace context, how to isolate their own requests on a shared staging cluster, how
+  to filter on a JWT or cookie with mirrord, which `http_filter` to put on the services in their
+  `mirrord-up.yaml`, or wants to inspect live traffic with mirrord dump. Changes no application
+  code: propagation gaps go to the mirrord-header-propagation skill.
 metadata:
   author: MetalBear
-  version: "1.2"
+  version: "1.3"
 ---
 
 # mirrord Propagation Discovery Skill
 
-> mirrord routes a request to a developer's local process when the request matches an HTTP filter. On a shared cluster that filter has to pick out **one developer's requests at every service the request passes through**, so the value it matches on must already travel with the request across all hops. This skill finds that value in a live environment instead of assuming one: it dumps the traffic arriving at each service with `mirrord dump`, checks which identifiers survive from the edge to the last hop, and turns the best one into a `mirrord.json` filter. The sister skill `mirrord-header-propagation` changes code to make `baggage` propagate; this one changes nothing and tells you what already works.
+> mirrord routes a request to a developer's local process when the request matches an HTTP filter. On a shared cluster that filter has to pick out **one developer's requests at every service the request passes through**, so the value it matches on must already travel with the request across all hops. This skill finds that value in a live environment instead of assuming one: it dumps the traffic arriving at each service with `mirrord dump`, checks which identifiers survive from the edge to the last hop, and turns the best one into a filter: in `mirrord.json` when the developer runs one service with `mirrord exec`, or on each service of `mirrord-up.yaml` when they run several together with `mirrord up`. The sister skill `mirrord-header-propagation` changes code to make `baggage` propagate; this one changes nothing and tells you what already works.
 
 ## Security Boundaries
 
@@ -66,6 +67,15 @@ choco install --pre mirrord                     # Windows
 Anything else (no package manager, locked-down machines): point to the [CLI install docs](https://metalbear.com/mirrord/docs/getting-started/quick-start/install-mirrord) and let the user install a release binary. Version notes: port auto-detection in `mirrord dump` needs **3.191.0+**, jq header filters (`header_filter_jq` / `{ "query" }`) need **3.194.0+** on the CLI and the agent image, and the Operator (if installed) must be current enough for either. A local `jq` is optional but useful for testing jq programs before they go into the config.
 
 Confirm with the user which namespace, which cluster, and which request flow they want to isolate (for example "a `POST /v1/orders` from the gateway through orders, inventory and billing"). If they want "all my traffic", you are looking for an identity-bound identifier; if they want "the requests I send from my terminal", an injectable one.
+
+Settle which file the filter goes into. Look for an existing `mirrord-up.yaml` first, or use the file the user names:
+
+```bash
+find . -name 'mirrord-up*.yaml' -not -path '*/node_modules/*'
+```
+
+- **One service run locally** (`mirrord exec`, an IDE plugin): the output is `.mirrord/mirrord.json`.
+- **Several services run together with `mirrord up`**, or the repository already has a `mirrord-up.yaml`: the output is the filter on every service in that file. Update the existing file, or write `.mirrord/mirrord-up.yaml` when there is none. Ask which services the developer runs locally and the local command for each: `run.command` is required, and you must not invent it. `mirror` mode in `mirrord up` needs mirrord **3.258.0+**.
 
 ### Step 2: Map the hops
 
@@ -124,6 +134,7 @@ Load `references/filter-recipes.md` and use the simplest filter that matches the
 - A JWT claim, a cookie list, or anything that needs parsing: `header_filter_jq` (top level) or `{ "query": ... }` inside `all_of`/`any_of`. The program receives each header as a lowercase-named `name: value` string and must output `true`. Guard it with `select(startswith("<name>: "))` and `try ... catch false`.
 - Narrow with `all_of` when the identity is per tenant rather than per developer (add the route or method). Don't add a `^user-agent: (?!kube-probe)` entry: health checks carry no identifier so the filter already skips them, and that entry rejects internal requests sent without a `user-agent`.
 - Put the developer's value behind `{{ key }}` so the config can be committed, and set `ports` to the service's HTTP ports.
+- For `mirrord-up.yaml`, the same filter object goes under `services.<name>.http_filter` of each service, with its regexes and jq programs as single-quoted YAML strings (the recipes file, section "In `mirrord-up.yaml`", has the field mapping and the escaping rule). Set it even when the identifier is `baggage`: a service with no `http_filter` gets `baggage: .*mirrord-session={key}.*`, which has no member boundary, so a session keyed `alice` also receives the requests of `alice2`.
 
 Test jq programs locally first: `jq -n --arg h 'authorization: Bearer <token>' '$h | <program>'` must print `true` for the developer's token and nothing or `false` for others.
 
@@ -135,7 +146,15 @@ Prove the filter on the deepest hop it should reach, in mirror mode so nothing i
 mirrord exec -f .mirrord/mirrord.json --key <value> --target deployment/<deepest-hop> -n <namespace> -- python3 scripts/request_recorder.py --port <service port> --header baggage
 ```
 
-Run it with `MIRRORD_PROGRESS_MODE=dumb` and wait for the `Ready!` line before sending traffic. Send one request at the edge with the identifier set to `<value>` and one with a different value. The local process must receive the first and not the second. If it receives neither, check `ports`, that the identifier really reaches this hop (the dump from Step 3), and that the agent version supports the filter type. Then the developer can switch `"mode"` to `"steal"` for real work. Point to the `mirrord-config` skill for the rest of the config and to the browser extension for browser-driven flows.
+With a `mirrord-up.yaml`, verify through `mirrord up`, so the YAML the developer uses is the YAML you tested. Write a one-service file to the dump directory: the deepest hop's `target` and `http_filter` copied from the output file, `default_mode: mirror`, and the recorder as `run.command`, with the absolute path to `scripts/request_recorder.py` (an example is in `references/filter-recipes.md`). Then run it:
+
+```bash
+mirrord up -f "$DUMP_DIR/verify-up.yaml" --key <value>
+```
+
+On a CLI older than 3.258.0, which has no `mirror` mode in `mirrord up`, verify the same filter with the `mirrord exec` command above and an equivalent `mirrord.json` instead.
+
+Run it with `MIRRORD_PROGRESS_MODE=dumb` and wait until the session is up before sending traffic: the `Ready!` line under `mirrord exec`, the recorder's `recorder listening` line under `mirrord up`. Send one request at the edge with the identifier set to `<value>` and one with a different value. The local process must receive the first and not the second. If it receives neither, check `ports`, that the identifier really reaches this hop (the dump from Step 3), and that the agent version supports the filter type. Then the developer can switch `"mode"` to `"steal"` in `mirrord.json`, or `default_mode` to `split` (the steal-with-filter mode) in `mirrord-up.yaml`, for real work. Point to the `mirrord-config` skill for the rest of a `mirrord.json`, to the `mirrord-up` skill for the rest of a `mirrord-up.yaml`, and to the browser extension for browser-driven flows.
 
 ### Step 7: Hand off the gaps
 
@@ -165,9 +184,9 @@ Why: <reaches k of N services with the developer's value; who/what forwards it; 
 ## Candidates considered
 | Identifier | <one column per service> | Unique | Controllable | Verdict |
 
-## mirrord.json
+## mirrord.json                     or ## mirrord-up.yaml
 <complete config: target, namespace, mode mirror, ports, http_filter with {{ key }}, probes excluded>
-<the exec command and the curl header the developer sends>
+<the exec or up command and the curl header the developer sends>
 
 ## Next steps
 <one line per gap: what to change, where, which skill>
@@ -181,6 +200,8 @@ Rules for the report:
 - **Every service in the hop inventory appears exactly once**, in "covered", "not covered", or "not observable". A service you never dumped is "not observable" with the reason.
 - **"Covered" means the probe value, or a value shared with the previous hop, was seen in the dump of that service**, not that its stack should forward it.
 - **The `mirrord.json` is complete and runnable**: `target` with namespace, `mode: "mirror"`, `ports`, and the filter with `{{ key }}` and member boundaries. Write it to `.mirrord/mirrord.json` unless the user names another path, and say which `target.path`/`ports` to change for the other covered services.
+- **A `mirrord-up.yaml` is complete and runnable too**: every service the developer runs locally has `target` with `path` and `namespace`, the same `http_filter` with `{{ key }}`, member boundaries and its own `ports`, and the `run.command` the developer gave. A new file sets `default_mode: mirror` on each service.
+- **In an existing `mirrord-up.yaml`, change only `http_filter`.** Edit the text in place; don't load and re-serialize it, because a YAML library drops comments and reorders keys. Show the old and the new filter and ask before you replace a filter that is already there. Leave `default_mode` as it is and give the developer `mirrord up -m mirror` for a first check. List each service whose target is not a covered hop under "Services not covered": its filter matches nothing until that gap is fixed.
 - When **every** service is covered, "Services not covered" is an empty section with "none" and the Next steps are only the steal switch.
 - When **no** candidate covers more than the edge, still fill the report: the recommendation is `baggage` plus the `mirrord-header-propagation` skill, and "Services not covered" lists each hop with what it would take.
 
@@ -188,7 +209,8 @@ Rules for the report:
 
 - Don't recommend a filter from the catalog without seeing it in a dump on the last hop. "Has OpenTelemetry" doesn't mean the header arrives.
 - Don't filter on the full `traceparent`; the span-id changes every hop. Match the trace-id only.
-- Don't write a token, cookie, or captured trace id into `mirrord.json`. Match a claim or a `{{ key }}`.
+- Don't write a token, cookie, or captured trace id into `mirrord.json` or `mirrord-up.yaml`. Match a claim or a `{{ key }}`.
+- Don't leave a `mirrord-up.yaml` service on the default filter. It matches `mirrord-session=<key>` as a substring, so keys that share a prefix take each other's requests.
 - Don't use `steal` while discovering, and don't verify without a filter on a shared target.
 - Don't treat `x-request-id` as controllable until a probe shows the ingress preserved your value.
 - Don't evaluate a jq program on every header unguarded; `select(startswith("<name>: "))` first.
