@@ -1,6 +1,6 @@
 # mirrord-propagation-discovery
 
-Find out what mirrord can filter traffic on in **your** cluster: scan each service's live incoming traffic with `mirrord dump`, check which identifier (a `baggage` member, a correlation-id header, a tenant or user id, a trace id, a JWT claim, a cookie, a path segment, a body field) is present on every hop, unique to one developer, and settable by that developer, and turn it into a filter, written to both a `mirrord.json` (`mirrord exec`) and an example `mirrord-up.yaml` (`mirrord up`). No application code changes.
+Find out what mirrord can filter traffic on in **your** cluster: scan each service's live incoming traffic with `mirrord dump`, check which identifier (a `baggage` member, a correlation-id header, a tenant or user id, a trace id, a JWT claim, a cookie, a path segment, a body field) is present on every hop, unique to one developer, and settable by that developer, and turn it into a `mirrord.json` filter. No application code changes.
 
 ## What it does
 
@@ -9,10 +9,10 @@ This skill helps AI agents:
 - **Map** the hops of a request flow from the cluster: ingress, services, workloads, ports
 - **Dump** every hop at once in mirror mode, send one tagged probe request at the edge (or observe real traffic), and read the output
 - **Score** the identifiers found per hop with a stdlib helper: presence, unique-per-request vs stable, probe hits, values shared across hops; JWT claims and `baggage`/`tracestate` members are decoded, secrets are never printed
-- **Build** the matching filter: `header_filter` regex, `header_filter_jq` for JWTs and cookies, `path_filter`, `body_filter`, or `all_of`/`any_of` combinations, with `{{ key }}` templating. Write it into a `mirrord.json` and into an example `mirrord-up.yaml` with one service for each covered hop (or into the repository's existing `mirrord-up.yaml`)
-- **Verify** it in a mirror session on the deepest hop before anyone steals (`mirrord exec`, then `mirrord up` for the YAML), with a stdlib request recorder as the local process so the copied request causes no duplicate writes
+- **Build** the matching filter: `header_filter` regex, `header_filter_jq` for JWTs and cookies, `path_filter`, `body_filter`, or `all_of`/`any_of` combinations, with `{{ key }}` templating
+- **Verify** it in a mirror session on the deepest hop before anyone steals, with a stdlib request recorder as the local process so the copied request causes no duplicate writes
 - **Recognise** anything else that travels between hops, from a reference of vendor trace headers, legacy baggage names, auth-proxy identity headers, routing and feature-flag headers, and queue and event carriers
-- **Report** what to filter on, which services it covers and which it does not (and why), which hops a dump can't observe (queue consumers, TLS terminated in the pod), a complete runnable `mirrord.json` and `mirrord-up.yaml`, and what the `mirrord-header-propagation` skill has to fix. The report is printed and saved as `.mirrord/propagation-discovery.md`
+- **Report** what to filter on, which services it covers and which it does not (and why), which hops a dump can't observe (queue consumers, TLS terminated in the pod), a complete runnable `mirrord.json`, and what the `mirrord-header-propagation` skill has to fix. The report is printed and saved as `.mirrord/propagation-discovery.md`
 
 ## Example prompts
 
@@ -28,14 +28,12 @@ This skill helps AI agents:
 "Our x-request-id filter works on the API but not on the worker behind it — find something that does"
 
 "Can I filter on my tenant id, or on the trace id our tracer propagates, across every hop?"
-
-"Find a filter that works on every service in our mirrord-up.yaml and set it there"
 ```
 
 ## Prerequisites
 
 - `kubectl` access to a staging or development cluster
-- mirrord CLI **3.191.0+** (`mirrord dump` port auto-detection); **3.194.0+** for jq header filters; **3.258.0+** for `mirror` mode in `mirrord up`
+- mirrord CLI **3.191.0+** (`mirrord dump` port auto-detection); **3.194.0+** for jq header filters
 - A way to send a request at the edge (ingress URL or `kubectl port-forward`) for the active probe; passive observation works without it
 - Nothing Team/Enterprise-specific: `mirrord dump` and HTTP filters are open source. Filtering traffic that the pod itself decrypts needs the Operator's HTTPS stealing setup
 

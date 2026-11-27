@@ -1,6 +1,6 @@
 # Report template
 
-The skill ends with this report, printed in the conversation and saved to `.mirrord/propagation-discovery.md` next to the generated `mirrord.json` and `mirrord-up.yaml` (or the path the user asks for). The example below is filled in for a fictional four-service flow so the shape is clear; replace every value with what the dumps showed. Header **names** and value **shapes** only: never a token, cookie, or captured trace id.
+The skill ends with this report, printed in the conversation and saved to `.mirrord/propagation-discovery.md` next to the generated config (or the path the user asks for). The example below is filled in for a fictional four-service flow so the shape is clear; replace every value with what the dumps showed. Header **names** and value **shapes** only: never a token, cookie, or captured trace id.
 
 ---
 
@@ -69,51 +69,11 @@ Saved to `.mirrord/mirrord.json`. Run with `mirrord exec -f .mirrord/mirrord.jso
 
 Change `target.path` and both `ports` for `gateway` (8080) or `inventory` (9090); the filter is the same.
 
-## mirrord-up.yaml
-
-Saved to `.mirrord/mirrord-up.yaml`, with one service for each covered hop. Delete the services you don't run locally. Run with `mirrord up -f .mirrord/mirrord-up.yaml --key <your-name>` and send requests with `-H "baggage: mirrord-session=<your-name>"`. Mirror mode first; change `default_mode` to `split` once only your requests arrive. The `gateway` command is a placeholder: replace it with the command that starts the gateway locally.
-
-```yaml mirrord-up
-services:
-  gateway:
-    target:
-      path: deployment/gateway
-      namespace: staging
-    default_mode: mirror
-    http_filter:
-      header_filter: '^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$'
-      ports: [8080]
-    run:
-      command: ["<start command for gateway>"]
-  orders:
-    target:
-      path: deployment/orders
-      namespace: staging
-    default_mode: mirror
-    http_filter:
-      header_filter: '^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$'
-      ports: [8080]
-    run:
-      command: ["npm", "run", "dev"]
-  inventory:
-    target:
-      path: deployment/inventory
-      namespace: staging
-    default_mode: mirror
-    http_filter:
-      header_filter: '^baggage:\s*(.*,\s*)?mirrord-session={{ key }}\s*([,;].*)?$'
-      ports: [9090]
-    run:
-      command: ["./gradlew", "bootRun"]
-```
-
-When the repository already has a `mirrord-up.yaml`, this section names that file instead. Say which services got a new `http_filter`, quote the filter each one had before, and give `mirrord up -f <that file> --key <your-name> -m mirror` for the first check.
-
 ## Next steps
 
 1. `inventory → billing`: add the OTel transport to the billing client so `baggage` reaches billing (`mirrord-header-propagation`).
 2. `notifications-worker`: confirm `baggage` is on the SQS message attributes; if not, the same propagation work covers the producer in `orders`.
 3. `payments`: set up HTTPS stealing, then re-run this discovery for that hop.
 
-**Verified:** mirror session on `deployment/inventory` with the config above and `scripts/request_recorder.py` as the local process received the tagged probe and not the untagged one. The same check through `mirrord up`, with the `inventory` entry of the `mirrord-up.yaml`, gave the same result. `billing` not verified (identifier does not reach it). `inventory` runs 2 replicas; both were dumped.
+**Verified:** mirror session on `deployment/inventory` with the config above and `scripts/request_recorder.py` as the local process received the tagged probe and not the untagged one. `billing` not verified (identifier does not reach it). `inventory` runs 2 replicas; both were dumped.
 **Dumps:** 3-minute window on each service plus 2 active probes, 2026-10-13; logs deleted.
